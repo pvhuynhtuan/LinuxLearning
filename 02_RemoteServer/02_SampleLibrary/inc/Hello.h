@@ -1,0 +1,2 @@
+void PrintBye();
+void PrintHello();

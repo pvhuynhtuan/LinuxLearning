@@ -5,4 +5,5 @@ void main()
 {
     printf("Hello world, this is main!\n");
     PrintHello();
+    PrintBye();
 }

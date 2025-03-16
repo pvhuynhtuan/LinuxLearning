@@ -6,5 +6,10 @@
         {
             "path": "02_RemoteServer"
         }
-    ]
+    ],
+    "settings": {
+        "files.associations": {
+            "signal.h": "c"
+        }
+    }
 }

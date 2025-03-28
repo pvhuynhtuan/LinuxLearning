@@ -9,7 +9,8 @@
     ],
     "settings": {
         "files.associations": {
-            "signal.h": "c"
+            "signal.h": "c",
+            "stdio.h": "c"
         }
     }
 }

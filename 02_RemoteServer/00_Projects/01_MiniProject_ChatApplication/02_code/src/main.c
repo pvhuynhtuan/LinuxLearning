@@ -575,7 +575,7 @@ void *CA_ConnectionHandling(void *arg)
                 // Do nothing
             }
         }
-        printf("index = %d\n", existing_index);
+        //printf("index = %d\n", existing_index);
         if ((-1 == existing_index) && (giConnectedIPCount < MAX_CONNECT_IP_SIZE))
         {
             // If the new connect is not existed in history, store new one

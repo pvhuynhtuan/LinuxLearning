@@ -613,8 +613,6 @@ void *CA_ReadHandling(void *arg)
     Connection_t lsConnectionRead = *(Connection_t *)arg;
     char received_buffer[MAX_RECEIVE_LEN] = {0};
 
-    //free(arg);  // Free allocated memory for socket descriptor
-
     //Read the received data
     while(1)
     {

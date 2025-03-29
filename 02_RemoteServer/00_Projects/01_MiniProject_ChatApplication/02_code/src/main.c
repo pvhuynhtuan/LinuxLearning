@@ -415,6 +415,7 @@ void CA_list()
 {
     printf("Listing the addresses:\n");
 
+    printf("Total item in list = %d\n", giConnectedIPCount);
     for (int index = 0; index < giConnectedIPCount; index++)
     {
         printf("\tID = %d; Address = %s, port = %d\n", index, inet_ntoa(gsConnectedIPList[index].address.sin_addr),
@@ -572,6 +573,7 @@ void *CA_ConnectionHandling(void *arg)
     socklen_t lsAddr_size = sizeof(client_addr);
     int liNewClientSocket_fd;
     Connection_t lsHandlingConnection;
+    int existing_index;
 
     // Runtime thread, loop for always execute
     while(1)
@@ -587,8 +589,8 @@ void *CA_ConnectionHandling(void *arg)
 
         printf("\nNew client connected from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         // Store the accepted address
-        int existing_index = -1;
-        for (int index = 0; index <= giConnectedIPCount; index++)
+        existing_index = -1;
+        for (int index = 0; index < giConnectedIPCount; index++)
         {
             if (client_addr.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
             {
@@ -600,7 +602,7 @@ void *CA_ConnectionHandling(void *arg)
                 // Do nothing
             }
         }
-        //printf("index = %d\n", index);
+        printf("index = %d\n", existing_index);
         if ((-1 == existing_index) && (giConnectedIPCount < MAX_CONNECT_IP_SIZE))
         {
             // If the new connect is not existed in history, store new one

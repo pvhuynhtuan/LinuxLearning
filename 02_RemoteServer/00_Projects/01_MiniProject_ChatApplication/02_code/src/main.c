@@ -643,6 +643,8 @@ void *CA_ReadHandling(void *arg)
     //Read the received data
     while(1)
     {
+        // Zero out the structure
+        memset(received_buffer, 0, sizeof(received_buffer));
         int bytes_received = read(lsConnectionRead.socket_fd, received_buffer, sizeof(received_buffer));
         if (bytes_received <= 0)
         {
@@ -680,4 +682,4 @@ void *CA_ReadHandling(void *arg)
                 inet_ntoa(lsConnectionRead.address.sin_addr), ntohs(lsConnectionRead.address.sin_port), received_buffer);
         }
     }
-}
+} /* End of function CA_ReadHandling */

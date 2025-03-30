@@ -604,7 +604,8 @@ void *CA_ReadHandling(void *arg)
             for (int index = 0; index < giConnectedIPCount; index++)
             {
                 // found the peer id
-                if (lsConnectionRead->address.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+                if ((lsConnectionRead->address.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+                    && (lsConnectionRead->address.sin_port == gsConnectedIPList[index].address.sin_port))
                 {
                     liRemoveID = index;
                 }

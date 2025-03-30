@@ -17,6 +17,12 @@
 /********************************************************
 *                     DEFINE SECTION                    *
 ********************************************************/
+// ANSI color codes
+#define RESET "\033[0m"
+#define RED "\033[31m"
+#define GREEN "\033[32m"
+#define YELLOW "\033[33m"
+
 #define RECEIVE_ACCEPT 1
 
 #define COMMAND_BUFFER_SIZE 1024
@@ -360,8 +366,6 @@ void CA_connect(char *des, int port)
     }
     
     printf("Connected to: %s; Port = %d\n", des, port);
-    //Test connection
-    //write(liClient_fd, "Hello!", 7);
 
     // Store the connected address
     if (giConnectedIPCount < MAX_CONNECT_IP_SIZE)
@@ -374,8 +378,21 @@ void CA_connect(char *des, int port)
     {
         printf("The storage is archived the limit, cant't store more than address!\n");
     }
+
+    // Start to read any data from this connect as well
+    Connection_t *lsReadingConnection = malloc(sizeof(Connection_t));;
+
+    // Create the structure to pass through the thread
+    lsReadingConnection->socket_fd = liClient_fd;
+    lsReadingConnection->address = serv_addr;
+
+    printf("Start to read from address: %s\n\n", inet_ntoa(lsReadingConnection->address.sin_addr));
+
+    // Create a new thread for the client read
+    pthread_t client_thread;
+    pthread_create(&client_thread, NULL, CA_ReadHandling, (void *)lsReadingConnection);
+    pthread_detach(client_thread);  // Auto-clean up thread
     
-    // close(liClient_fd);
     return;
 } /* End of function CA_connect */
 
@@ -394,7 +411,7 @@ void CA_list()
         printf("\tID = %d; Address = %s, port = %d\n", index, inet_ntoa(gsConnectedIPList[index].address.sin_addr),
             ntohs(gsConnectedIPList[index].address.sin_port));
     }
-}
+} /* End of function CA_list */
 
 /*******************************************************************************************
  * Function name: CA_terminate
@@ -413,6 +430,7 @@ void CA_terminate(int id)
     }
 
     //Close the connection
+    shutdown(gsConnectedIPList[id].socket_fd, SHUT_RDWR);
     close(gsConnectedIPList[id].socket_fd);
 
     // Remove from the list
@@ -423,7 +441,7 @@ void CA_terminate(int id)
     giConnectedIPCount--;
 
     printf("Connection ID=%d termindated ID!\n", id);
-}
+} /* End of CA_terminate function */
 
 /*******************************************************************************************
  * Function name: CA_send
@@ -443,18 +461,10 @@ void CA_send(int id, char *message)
         return;
     }
     
-    // setsockopt(gsConnectedIPList[id].socket_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt));
-    // if (gsConnectedIPList[id].socket_fd < 0)
-    // {
-    //     printf("Socket is invalid!\n");
-    //     return;
-    // }
-
-    // write(gsConnectedIPList[id].socket_fd, message, strlen(message));
-    int bytes_send = send(gsConnectedIPList[id].socket_fd, message, strlen(message), MSG_NOSIGNAL);
+    int bytes_send = write(gsConnectedIPList[id].socket_fd, message, strlen(message));
 
     printf("%d bytes of message \"%s\" sent to peer %d!\n", bytes_send, message, id);
-}
+} /* End of CA_send function */
 
 /*******************************************************************************************
  * Function name: CA_exit
@@ -533,7 +543,7 @@ void CA_StartServer(int port)
         
     pthread_t lThread_tid;
     pthread_create(&lThread_tid, NULL, CA_ConnectionHandling, NULL);
-}
+} /* End of CA_StartServer function */
 
 /*******************************************************************************************
  * Function name: CA_ConnectionHandling
@@ -560,7 +570,7 @@ void *CA_ConnectionHandling(void *arg)
             continue;
         }
 
-        printf("\nNew client connected from %s:%d\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        printf(YELLOW "\nNew client connected from %s:%d\n" RESET, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         // Store the accepted address
         existing_index = -1;
         for (int index = 0; index < giConnectedIPCount; index++)
@@ -588,7 +598,6 @@ void *CA_ConnectionHandling(void *arg)
             printf("The storage is archived the limit, cant't store more than address!\n");
         }
 
-
         // Create the structure to pass through the thread
         lsHandlingConnection.socket_fd = liNewClientSocket_fd;
         lsHandlingConnection.address = client_addr;
@@ -610,15 +619,17 @@ void *CA_ConnectionHandling(void *arg)
  ******************************************************************************************/
 void *CA_ReadHandling(void *arg)
 {
-    Connection_t lsConnectionRead = *(Connection_t *)arg;
+    Connection_t *lsConnectionRead = malloc(sizeof(Connection_t));
+    *lsConnectionRead = *(Connection_t *)arg;
     char received_buffer[MAX_RECEIVE_LEN] = {0};
 
+    printf("\nReading from address: %s ...\n", inet_ntoa(lsConnectionRead->address.sin_addr));
     //Read the received data
     while(1)
     {
         // Zero out the structure
         memset(received_buffer, 0, sizeof(received_buffer));
-        int bytes_received = read(lsConnectionRead.socket_fd, received_buffer, sizeof(received_buffer));
+        int bytes_received = read(lsConnectionRead->socket_fd, received_buffer, sizeof(received_buffer));
         if (bytes_received <= 0)
         {
             // The peer is disconnected, to be remove the stored ID
@@ -627,32 +638,33 @@ void *CA_ReadHandling(void *arg)
             for (int index = 0; index < giConnectedIPCount; index++)
             {
                 // found the peer id
-                if (lsConnectionRead.address.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+                if (lsConnectionRead->address.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
                 {
                     liRemoveID = index;
                 }
             }
 
-            //Close the connection
-            printf("The peer ID = %d, address = %s is disconnected, removed from list!\n",
-                liRemoveID, inet_ntoa(gsConnectedIPList[liRemoveID].address.sin_addr));
-            close(gsConnectedIPList[liRemoveID].socket_fd);
-
-            // Remove from the list
-            if(giConnectedIPCount > 0)
+            if (-1 != liRemoveID)
             {
-                for (int index = liRemoveID; index < giConnectedIPCount - 1; index++)
-                {
-                    gsConnectedIPList[index] = gsConnectedIPList[index + 1];
-                }
-                giConnectedIPCount--;
+                //Close the connection
+                printf(RED "\nThe peer ID = %d, address = %s is disconnected, removed from list!\n" RESET,
+                    liRemoveID, inet_ntoa(gsConnectedIPList[liRemoveID].address.sin_addr));
+                
+                CA_terminate(liRemoveID);
             }
+            else
+            {
+                printf(RED "\nUnknown peer disconnected! address = %s, return = %d\n" RESET,
+                    inet_ntoa(lsConnectionRead->address.sin_addr), bytes_received);
+            }
+
+            free(lsConnectionRead);
             pthread_exit(NULL);
         }
         else
         {
-            printf("\nMessage from %s:%d> %s\n", 
-                inet_ntoa(lsConnectionRead.address.sin_addr), ntohs(lsConnectionRead.address.sin_port), received_buffer);
+            printf(GREEN "\nMessage from %s:%d > %s\n" RESET, 
+                inet_ntoa(lsConnectionRead->address.sin_addr), ntohs(lsConnectionRead->address.sin_port), received_buffer);
         }
     }
 } /* End of function CA_ReadHandling */

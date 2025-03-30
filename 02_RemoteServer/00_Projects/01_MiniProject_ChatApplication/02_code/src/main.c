@@ -325,7 +325,8 @@ void CA_connect(char *des, int port)
     //Req: CA-RS-FR-12
     for (int index = 0; index < giConnectedIPCount; index++)
     {
-        if (serv_addr.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+        if ((serv_addr.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+            && (serv_addr.sin_port == gsConnectedIPList[index].address.sin_port))
         {
             printf("This address already connected!\n");
             return;

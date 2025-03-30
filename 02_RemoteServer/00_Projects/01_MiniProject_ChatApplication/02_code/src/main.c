@@ -72,6 +72,7 @@ void CA_exit();
 void CA_StartServer(int port);
 void *CA_ConnectionHandling(void *arg);
 void *CA_ReadHandling(void *arg);
+void CA_StoreConnection(int fd, struct sockaddr_in addr);
 
 /********************************************************
 *         GLOBAL VARIABLE DECLARATION SECTION           *
@@ -367,17 +368,7 @@ void CA_connect(char *des, int port)
     
     printf("Connected to: %s; Port = %d\n", des, port);
 
-    // Store the connected address
-    if (giConnectedIPCount < MAX_CONNECT_IP_SIZE)
-    {
-        gsConnectedIPList[giConnectedIPCount].socket_fd = liClient_fd;
-        gsConnectedIPList[giConnectedIPCount].address = serv_addr;
-        giConnectedIPCount  = (giConnectedIPCount + 1) % MAX_CONNECT_IP_SIZE;
-    }
-    else
-    {
-        printf("The storage is archived the limit, cant't store more than address!\n");
-    }
+    CA_StoreConnection(liClient_fd, serv_addr);
 
     // Start to read any data from this connect as well
     Connection_t *lsReadingConnection = malloc(sizeof(Connection_t));;
@@ -556,7 +547,6 @@ void *CA_ConnectionHandling(void *arg)
     socklen_t lsAddr_size = sizeof(client_addr);
     int liNewClientSocket_fd;
     Connection_t lsHandlingConnection;
-    int existing_index;
 
     // Runtime thread, loop for always execute
     while(1)
@@ -572,31 +562,7 @@ void *CA_ConnectionHandling(void *arg)
 
         printf(YELLOW "\nNew client connected from %s:%d\n" RESET, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         // Store the accepted address
-        existing_index = -1;
-        for (int index = 0; index < giConnectedIPCount; index++)
-        {
-            if (client_addr.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
-            {
-                existing_index = index;
-                break;
-            }
-            else
-            {
-                // Do nothing
-            }
-        }
-        //printf("index = %d\n", existing_index);
-        if ((-1 == existing_index) && (giConnectedIPCount < MAX_CONNECT_IP_SIZE))
-        {
-            // If the new connect is not existed in history, store new one
-            gsConnectedIPList[giConnectedIPCount].socket_fd = liNewClientSocket_fd;
-            gsConnectedIPList[giConnectedIPCount].address = client_addr;
-            giConnectedIPCount  = (giConnectedIPCount + 1) % MAX_CONNECT_IP_SIZE;
-        }
-        else
-        {
-            printf("The storage is archived the limit, cant't store more than address!\n");
-        }
+        CA_StoreConnection(liNewClientSocket_fd, client_addr);
 
         // Create the structure to pass through the thread
         lsHandlingConnection.socket_fd = liNewClientSocket_fd;
@@ -668,3 +634,47 @@ void *CA_ReadHandling(void *arg)
         }
     }
 } /* End of function CA_ReadHandling */
+
+/*******************************************************************************************
+ * Function name: CA_StoreConnection
+ * Functionality: Store the fd and address
+ ******************************************************************************************/
+void CA_StoreConnection(int fd, struct sockaddr_in addr)
+{
+    int existing_index;
+    
+    existing_index = -1;
+    for (int index = 0; index < giConnectedIPCount; index++)
+    {
+        if ((addr.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+            && (addr.sin_port == gsConnectedIPList[index].address.sin_port))
+        {
+            existing_index = index;
+            break;
+        }
+        else
+        {
+            // Do nothing
+        }
+    }
+    
+    if (-1 == existing_index)
+    {
+        // If the new connect is not existed in history, store new one
+        if (giConnectedIPCount < MAX_CONNECT_IP_SIZE)
+        {
+            gsConnectedIPList[giConnectedIPCount].socket_fd = fd;
+            gsConnectedIPList[giConnectedIPCount].address = addr;
+            giConnectedIPCount  = (giConnectedIPCount + 1) % MAX_CONNECT_IP_SIZE;
+        }
+        else
+        {
+            printf("The storage is archived the limit, cant't store more than address!\n");
+        }
+    }
+    else
+    {
+        // Do nothing
+    }
+    
+} /* End of CA_StoreConnection function */

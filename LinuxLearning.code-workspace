@@ -11,7 +11,18 @@
         "files.associations": {
             "signal.h": "c",
             "stdio.h": "c",
-            "stat.h": "c"
+            "stat.h": "c",
+            "poll.h": "c",
+            "sg_logprocess.h": "c",
+            "ifaddrs.h": "c",
+            "ioctl.h": "c",
+            "mp_connectionmanager.h": "c",
+            "sg_mainprocess.h": "c",
+            "unistd.h": "c",
+            "string.h": "c",
+            "__locale": "c",
+            "string": "c",
+            "string_view": "c"
         }
     }
 }

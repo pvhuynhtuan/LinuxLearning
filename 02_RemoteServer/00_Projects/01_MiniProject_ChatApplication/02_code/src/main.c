@@ -61,18 +61,18 @@ const char *COMMAND_EXIT = "exit";
 /********************************************************
 *          FUNCTION DECLARATION SECTION                 *
 ********************************************************/
-void CA_help();
-void CA_myip();
-void CA_myport();
-void CA_connect(char *des, int port);
-void CA_list();
-void CA_terminate(int id);
-void CA_send(int id, char *message);
-void CA_exit();
-void CA_StartServer(int port);
-void *CA_ConnectionHandling(void *arg);
-void *CA_ReadHandling(void *arg);
-void CA_StoreConnection(int fd, struct sockaddr_in addr);
+void SG_help();
+void SG_myip();
+void SG_myport();
+void SG_connect(char *des, int port);
+void SG_list();
+void SG_terminate(int id);
+void SG_send(int id, char *message);
+void SG_exit();
+void SG_StartServer(int port);
+void *SG_ConnectionHandling(void *arg);
+void *SG_ReadHandling(void *arg);
+void SG_StoreConnection(int fd, struct sockaddr_in addr);
 
 /********************************************************
 *         GLOBAL VARIABLE DECLARATION SECTION           *
@@ -94,7 +94,7 @@ int main(int argc, char *argv[])
         printf("Please input the target port!\n");
         return EXIT_SUCCESS;
     }
-    CA_StartServer(atoi(argv[1]));
+    SG_StartServer(atoi(argv[1]));
 
     // Loop to for command interface
     while(1)
@@ -103,15 +103,15 @@ int main(int argc, char *argv[])
         fgets(lpCommand, COMMAND_BUFFER_SIZE, stdin);
         if (strncmp(lpCommand, COMMAND_HELP, strlen(COMMAND_HELP)) == 0)
         {
-            CA_help();
+            SG_help();
         }
         else if (strncmp(lpCommand, COMMAND_MYIP, strlen(COMMAND_MYIP)) == 0)
         {
-            CA_myip();
+            SG_myip();
         }
         else if (strncmp(lpCommand, COMMAND_MYPORT, strlen(COMMAND_MYPORT)) == 0)
         {
-            CA_myport();
+            SG_myport();
         }
         else if (strncmp(lpCommand, COMMAND_CONNECT, strlen(COMMAND_CONNECT)) == 0)
         {
@@ -119,17 +119,17 @@ int main(int argc, char *argv[])
             int liPort = 0;
 
             sscanf (lpCommand, "connect %s %d", lpIP, &liPort);
-            CA_connect(lpIP, liPort);
+            SG_connect(lpIP, liPort);
         }
         else if (strncmp(lpCommand, COMMAND_LIST, strlen(COMMAND_LIST)) == 0)
         {
-            CA_list();
+            SG_list();
         }
         else if (strncmp(lpCommand, COMMAND_TERMINATE, strlen(COMMAND_TERMINATE)) == 0)
         {
             int liID = 0;
             sscanf (lpCommand, "terminate %d", &liID);
-            CA_terminate(liID);
+            SG_terminate(liID);
         }
         else if (strncmp(lpCommand, COMMAND_SEND, strlen(COMMAND_SEND)) == 0)
         {
@@ -137,27 +137,27 @@ int main(int argc, char *argv[])
             int liID = 0;
 
             sscanf (lpCommand, "send %d %s", &liID, lpMessage);
-            CA_send(liID, lpMessage);
+            SG_send(liID, lpMessage);
         }
         else if (strncmp(lpCommand, COMMAND_EXIT, strlen(COMMAND_EXIT)) == 0)
         {
-            CA_exit();
+            SG_exit();
         }
         else
         {
             //printf("Error! Unknown command, please try again!");
-            //CA_help();
+            //SG_help();
         }
     }
     return 1;
 }
 
 /*******************************************************************************************
- * Function name: CA_help
+ * Function name: SG_help
  * Functionality: Show the command usage
  * Requirement: CA-RS-FR-4
  ******************************************************************************************/
-void CA_help()
+void SG_help()
 {
     printf("\nUsage: CA [command] [ID] [Data] \n");
     printf("Command:\n");
@@ -169,14 +169,14 @@ void CA_help()
     printf("\tterminate <connection id>:\tNgắt kết nối với một peer dựa trên ID từ danh sách list.\n");
     printf("\tsend <connection id> <message>:\tGửi tin nhắn tới peer được chỉ định (ID từ danh sách list).\n");
     printf("\texit:\t\t\t\tĐóng tất cả các kết nối hiện tại và thoát chương trình.\n\n");
-} /* End of function CA_help */
+} /* End of function SG_help */
 
 /*******************************************************************************************
- * Function name: CA_myip
+ * Function name: SG_myip
  * Functionality: Show the IP of computer
  * Requirement: CA-RS-FR-5
  ******************************************************************************************/
-void CA_myip()
+void SG_myip()
 {
     struct ifaddrs *ifaddr, *ifa_index;
     char ip[INET_ADDRSTRLEN]; // The variable to store the ip as string
@@ -255,27 +255,27 @@ void CA_myip()
     freeifaddrs(ifaddr);
     close(liMyIP_fd);
     printf("Done!\n\n");
-} /* End of function CA_myip */
+} /* End of function SG_myip */
 
 /*******************************************************************************************
- * Function name: CA_myport
+ * Function name: SG_myport
  * Functionality: Show the PORT of application
  * Requirement: CA-RS-FR-6
  ******************************************************************************************/
-void CA_myport()
+void SG_myport()
 {
     printf("\nMy port is: %d\n", giMyPort);
 }
 
 /*******************************************************************************************
- * Function name: CA_connect
+ * Function name: SG_connect
  * Parameter:
  *      des: destinate address
  *      port: destinate port
  * Functionality: Show the PORT of application
  * Requirement: CA-RS-FR-8, CA-RS-FR-10, CA-RS-FR-11, CA-RS-FR-12
  ******************************************************************************************/
-void CA_connect(char *des, int port)
+void SG_connect(char *des, int port)
 {
     int liClient_fd;
     int opt;
@@ -287,7 +287,7 @@ void CA_connect(char *des, int port)
     // If the myip comment is not run before, run it!
     if (giMyIPCount <= 0)
     {
-        CA_myip();
+        SG_myip();
     }
     else
     {
@@ -369,7 +369,7 @@ void CA_connect(char *des, int port)
     
     printf("Connected to: %s; Port = %d\n", des, port);
 
-    CA_StoreConnection(liClient_fd, serv_addr);
+    SG_StoreConnection(liClient_fd, serv_addr);
 
     // Start to read any data from this connect as well
     Connection_t *lsReadingConnection = malloc(sizeof(Connection_t));;
@@ -382,18 +382,18 @@ void CA_connect(char *des, int port)
 
     // Create a new thread for the client read
     pthread_t client_thread;
-    pthread_create(&client_thread, NULL, CA_ReadHandling, (void *)lsReadingConnection);
+    pthread_create(&client_thread, NULL, SG_ReadHandling, (void *)lsReadingConnection);
     pthread_detach(client_thread);  // Auto-clean up thread
     
     return;
-} /* End of function CA_connect */
+} /* End of function SG_connect */
 
 /*******************************************************************************************
- * Function name: CA_list
+ * Function name: SG_list
  * Functionality: List all the connection
  * Requirement: CA-RS-FR-14
  ******************************************************************************************/
-void CA_list()
+void SG_list()
 {
     printf("Listing the addresses:\n");
 
@@ -403,16 +403,16 @@ void CA_list()
         printf("\tID = %d; Address = %s, port = %d\n", index, inet_ntoa(gsConnectedIPList[index].address.sin_addr),
             ntohs(gsConnectedIPList[index].address.sin_port));
     }
-} /* End of function CA_list */
+} /* End of function SG_list */
 
 /*******************************************************************************************
- * Function name: CA_terminate
+ * Function name: SG_terminate
  * Parameter:
  *      id: id of connection within the stored list
  * Functionality: Termindate the existed connection.
  * Requirement: CA-RS-FR-16, CA-RS-FR-17
  ******************************************************************************************/
-void CA_terminate(int id)
+void SG_terminate(int id)
 {
     //Req: CA-RS-FR-16
     if ((id < 0 )|| (id >= giConnectedIPCount) || (giConnectedIPCount == 0))
@@ -433,17 +433,17 @@ void CA_terminate(int id)
     giConnectedIPCount--;
 
     printf("Connection ID=%d termindated ID!\n", id);
-} /* End of CA_terminate function */
+} /* End of SG_terminate function */
 
 /*******************************************************************************************
- * Function name: CA_send
+ * Function name: SG_send
  * Parameter:
  *      id: id of connection within the stored list
  *      message: The message intended to send, max 100 characters
  * Functionality: Send a message to intended connect which existed in storage.
  * Requirement: CA-RS-FR-19, CA-RS-FR-20
  ******************************************************************************************/
-void CA_send(int id, char *message)
+void SG_send(int id, char *message)
 {
     int opt = 1;
 
@@ -456,14 +456,14 @@ void CA_send(int id, char *message)
     int bytes_send = write(gsConnectedIPList[id].socket_fd, message, strlen(message));
 
     printf("%d bytes of message \"%s\" sent to peer %d!\n", bytes_send, message, id);
-} /* End of CA_send function */
+} /* End of SG_send function */
 
 /*******************************************************************************************
- * Function name: CA_exit
+ * Function name: SG_exit
  * Functionality: Termindate all connection and exit program
  * Requirement: CA-RS-FR-26, CA-RS-FR-27 (T.B.D)
  ******************************************************************************************/
-void CA_exit()
+void SG_exit()
 {
     //Req: CA-RS-FR-26
     for (int index; index < giConnectedIPCount; index++)
@@ -480,10 +480,10 @@ void CA_exit()
 }
 
 /*******************************************************************************************
- * Function name: CA_StartServer
+ * Function name: SG_StartServer
  * Functionality: Start Server to listen the peer connect
  ******************************************************************************************/
-void CA_StartServer(int port)
+void SG_StartServer(int port)
 {
     int len, opt = 1;
     int new_socket_fd;
@@ -534,15 +534,15 @@ void CA_StartServer(int port)
     }
         
     pthread_t lThread_tid;
-    pthread_create(&lThread_tid, NULL, CA_ConnectionHandling, NULL);
-} /* End of CA_StartServer function */
+    pthread_create(&lThread_tid, NULL, SG_ConnectionHandling, NULL);
+} /* End of SG_StartServer function */
 
 /*******************************************************************************************
- * Function name: CA_ConnectionHandling
+ * Function name: SG_ConnectionHandling
  * Functionality: Thread to store the connection
  * Requirement: CA-RS-FR-22, CA-RS-FR-23, CA-RS-FR-24, CA-RS-FR-27
  ******************************************************************************************/
-void *CA_ConnectionHandling(void *arg)
+void *SG_ConnectionHandling(void *arg)
 {
     struct sockaddr_in client_addr;
     socklen_t lsAddr_size = sizeof(client_addr);
@@ -563,7 +563,7 @@ void *CA_ConnectionHandling(void *arg)
 
         printf(YELLOW "\nNew client connected from %s:%d\n" RESET, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
         // Store the accepted address
-        CA_StoreConnection(liNewClientSocket_fd, client_addr);
+        SG_StoreConnection(liNewClientSocket_fd, client_addr);
 
         // Create the structure to pass through the thread
         lsHandlingConnection.socket_fd = liNewClientSocket_fd;
@@ -571,7 +571,7 @@ void *CA_ConnectionHandling(void *arg)
 
         // Create a new thread for the client read
         pthread_t client_thread;
-        pthread_create(&client_thread, NULL, CA_ReadHandling, &lsHandlingConnection);
+        pthread_create(&client_thread, NULL, SG_ReadHandling, &lsHandlingConnection);
         pthread_detach(client_thread);  // Auto-clean up thread
         #else
         
@@ -580,11 +580,11 @@ void *CA_ConnectionHandling(void *arg)
 }
 
 /*******************************************************************************************
- * Function name: CA_ReadHandling
+ * Function name: SG_ReadHandling
  * Functionality: Thread to handle the receive message
  * Requirement: CA-RS-FR-22, CA-RS-FR-23, CA-RS-FR-24, CA-RS-FR-27
  ******************************************************************************************/
-void *CA_ReadHandling(void *arg)
+void *SG_ReadHandling(void *arg)
 {
     Connection_t *lsConnectionRead = malloc(sizeof(Connection_t));
     *lsConnectionRead = *(Connection_t *)arg;
@@ -618,7 +618,7 @@ void *CA_ReadHandling(void *arg)
                 printf(RED "\nThe peer ID = %d, address = %s is disconnected, removed from list!\n" RESET,
                     liRemoveID, inet_ntoa(gsConnectedIPList[liRemoveID].address.sin_addr));
                 
-                CA_terminate(liRemoveID);
+                SG_terminate(liRemoveID);
             }
             else
             {
@@ -635,13 +635,13 @@ void *CA_ReadHandling(void *arg)
                 inet_ntoa(lsConnectionRead->address.sin_addr), ntohs(lsConnectionRead->address.sin_port), received_buffer);
         }
     }
-} /* End of function CA_ReadHandling */
+} /* End of function SG_ReadHandling */
 
 /*******************************************************************************************
- * Function name: CA_StoreConnection
+ * Function name: SG_StoreConnection
  * Functionality: Store the fd and address
  ******************************************************************************************/
-void CA_StoreConnection(int fd, struct sockaddr_in addr)
+void SG_StoreConnection(int fd, struct sockaddr_in addr)
 {
     int existing_index;
     
@@ -679,4 +679,4 @@ void CA_StoreConnection(int fd, struct sockaddr_in addr)
         // Do nothing
     }
     
-} /* End of CA_StoreConnection function */
+} /* End of SG_StoreConnection function */

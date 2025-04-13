@@ -4,9 +4,6 @@
 /********************************************************
 *                    INCLUDE SECTION                    *
 ********************************************************/
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <net/if.h>
 
 /********************************************************
 *                     DEFINE SECTION                    *
@@ -26,11 +23,7 @@
 /********************************************************
 *                    TYPEDEF SECTION                    *
 ********************************************************/
-typedef struct
-{
-    int socket_fd;
-    struct sockaddr_in address;
-} Connection_t;
+
 
 /********************************************************
 *         GLOBAL VARIABLE DECLARATION SECTION           *

@@ -11,6 +11,7 @@
 // Include user's header
 #include "main.h"
 #include "MP_ConnectionManager.h"
+#include "MP_DataSharing.h"
 
 /********************************************************
 *                     DEFINE SECTION                    *
@@ -19,6 +20,11 @@
 /********************************************************
 *                    TYPEDEF SECTION                    *
 ********************************************************/
+typedef struct
+{
+    int socket_fd;
+    struct sockaddr_in address;
+} Connection_t;
 
 /********************************************************
 *                 CONSTANCE SECTION                     *

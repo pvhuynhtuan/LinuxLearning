@@ -63,7 +63,7 @@ int main(int argc, char *argv[])
         // This is the parent process
         while(1)
         {
-            printf("Parent process: Show something about system!\n");
+            //printf("Parent process: Show something about system!\n");
             sleep(5);
         }
     }

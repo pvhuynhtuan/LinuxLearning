@@ -15,7 +15,7 @@ void LP_main()
 {
     while(1)
     {
-        printf("Log process: This is the main function\n");
+        //printf("Log process: This is the main function\n");
         sleep(3);
     }
 }

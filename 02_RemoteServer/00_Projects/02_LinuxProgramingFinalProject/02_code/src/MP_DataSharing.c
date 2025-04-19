@@ -13,11 +13,12 @@
 /********************************************************
 *                     DEFINE SECTION                    *
 ********************************************************/
-#define DS_QUEUE_NAME  "/bin/sg_msg_queue"
+#define DS_QUEUE_NAME  "/sg_msg_queue"
+// #define DS_MQ_MODE (S_IRUSR | S_IWUSR ) 
 #define DS_MAX_SIZE    1024
 #define DS_MSG_STOP    "exit"
 
-#define DS_SENSOR_DATA_FORMAT   "%d;%s;%d;%d"
+#define DS_SENSOR_DATA_FORMAT   "%d %s %d %lf"
 
 /********************************************************
 *                    TYPEDEF SECTION                    *
@@ -50,14 +51,15 @@ int DS_QueueInit()
 
     mq_unlink(DS_QUEUE_NAME);  // Ensure clean state before starting
 
-    gsMessageQueueDes = mq_open(DS_QUEUE_NAME, O_CREAT | O_RDWR, 0666, &attr);
+    gsMessageQueueDes = mq_open(DS_QUEUE_NAME, O_CREAT | O_RDWR | O_NONBLOCK, 0666, &attr);
     if (gsMessageQueueDes == (mqd_t)-1)
     {
-        perror("mq_open");
+        perror("Data Sharing > mq_open");
         return -1; // Return fail
     }
     else
     {
+        printf("Data Sharing > Queue init success!\n");
         return 0; // Return successful
     }
 } /* End of function DS_QueueInit */
@@ -77,27 +79,42 @@ void DS_Close()
  * Parameter:
  *      sensorData: The node data (struct)
  *      prio: Priority of message
- * Return value: None
+ * Return value:
+ *      -1: Sending failed
+ *       0: Sending successfully
  * Functionality: Push the message to queue with expected priority
  * Requirement: 
  ******************************************************************************************/
 int DS_QueuePush(SensorData_t sensorData, unsigned int prio)
 {
     char lpBuf[DS_MAX_SIZE] = {0};
+    // Zero out the structure
+    memset(lpBuf, 0, DS_MAX_SIZE);
 
     int liNodeID = 0;
     char lpAddress[INET_ADDRSTRLEN] = {0};
     int liPort = 0;
-    int liTemperature = 0;
+    double ldTemperature;
 
     // Get the data
     liNodeID = sensorData.SensorNodeID;
     strlcpy(lpAddress, inet_ntoa(sensorData.address.sin_addr), INET_ADDRSTRLEN);
     liPort = ntohs(sensorData.address.sin_port);
-    liTemperature = sensorData.Temperature;
+    ldTemperature = sensorData.Temperature;
 
     // Prepare the buffer
-    sprintf(lpBuf, DS_SENSOR_DATA_FORMAT, liNodeID, lpAddress, liPort, liTemperature);
+    sprintf(lpBuf, DS_SENSOR_DATA_FORMAT, liNodeID, lpAddress, liPort, ldTemperature);
+
+    // Test print
+    #if (DS_TEST_ENABLE == 1)
+    printf("Data Sharing > Pushed Data: \n");
+    printf("\tliNodeID = %d\n", liNodeID);
+    printf("\tlpAddress = %s\n", lpAddress);
+    printf("\tliPort = %d\n", liPort);
+    printf("\tldTemperature = %lf\n", ldTemperature);
+    printf("\tMessage: %s\n", lpBuf);
+    printf("\tPriority = %d\n", prio);
+    #endif
 
     //Send the data via Queue
     return mq_send(gsMessageQueueDes, lpBuf, strlen(lpBuf) + 1, prio);
@@ -110,37 +127,50 @@ int DS_QueuePush(SensorData_t sensorData, unsigned int prio)
  *      prio: expecting priority of message
  * Return value:
  *      -1: Getting failed or the message priority is unmatch
- *      0: Getting successfully
+ *       number: Getting successfully and return the number of bytes
  * Functionality: Get the message from queue with expected priority
  * Requirement: 
  ******************************************************************************************/
 int DS_QueueGet(SensorData_t *sensorData, unsigned int prio)
 {
     char lpBuf[DS_MAX_SIZE] = {0};
+    // Zero out the structure
+    memset(lpBuf, 0, DS_MAX_SIZE);
 
     int liNodeID = 0;
     char lpAddress[INET_ADDRSTRLEN] = {0};
     int liPort = 0;
-    int liTemperature = 0;
+    double ldTemperature;
 
     unsigned int lulPriority;
 
     ssize_t llBytes_read = mq_receive(gsMessageQueueDes, lpBuf, DS_MAX_SIZE, &lulPriority);
     if (llBytes_read >= 0)
     {
-        // Check if the priority is matched with expected
+        // Check if the priority is matched with expected priority
         if (lulPriority == prio)
         {
-            printf("Queue received, msg = \"%s\", priority = %d\n", lpBuf, prio);
-            sscanf (lpBuf, DS_SENSOR_DATA_FORMAT, &liNodeID, lpAddress, &liPort, &liTemperature);
+            // printf("Data Sharing > Queue received, msg = \"%s\", priority = %d\n", lpBuf, prio);
+            sscanf(lpBuf, DS_SENSOR_DATA_FORMAT, &liNodeID, lpAddress, &liPort, &ldTemperature);
 
             // Set the data
             sensorData->SensorNodeID = liNodeID;
             sensorData->address.sin_addr.s_addr = inet_addr(lpAddress);
             sensorData->address.sin_port = htons(liPort);
-            sensorData->Temperature = liTemperature;
+            sensorData->Temperature = ldTemperature;
 
-            return 0;
+            // Test print
+            #if (DS_TEST_ENABLE == 1)
+            printf("Data Sharing > Get Data: \n");
+            printf("\tliNodeID = %d\n", liNodeID);
+            printf("\tlpAddress = %s\n", lpAddress);
+            printf("\tliPort = %d\n", liPort);
+            printf("\tldTemperature = %lf\n", ldTemperature);
+            printf("\tMessage: %s\n", lpBuf);
+            printf("\tlulPriority = %d\n", lulPriority);
+            #endif
+
+            return llBytes_read;
         }
         else
         {
@@ -151,7 +181,7 @@ int DS_QueueGet(SensorData_t *sensorData, unsigned int prio)
     } 
     else 
     {
-        perror("mq_receive");
+        //perror("mq_receive");
         return -1;
     }
 } /* End of function DS_QueueGet */

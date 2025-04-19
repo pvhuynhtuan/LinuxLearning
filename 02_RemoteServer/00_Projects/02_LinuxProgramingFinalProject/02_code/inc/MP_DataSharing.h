@@ -14,6 +14,8 @@
 #define DS_DATA_MANAGER_PRIO        1
 #define DS_STORAGE_MANAGER_PRIO     2
 
+#define DS_TEST_ENABLE              0
+
 /********************************************************
 *                    TYPEDEF SECTION                    *
 ********************************************************/
@@ -21,7 +23,7 @@ typedef struct
 {
     struct sockaddr_in address;
     int SensorNodeID;
-    int Temperature;
+    double Temperature;
 } SensorData_t;
 
 /********************************************************

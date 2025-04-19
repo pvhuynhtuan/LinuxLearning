@@ -12,13 +12,17 @@ all: build_obj
 		$(OBJ_DIR)/SG_LogProcess.o \
 		$(OBJ_DIR)/MP_ConnectionManager.o \
 		$(OBJ_DIR)/MP_DataSharing.o \
-		-lrt -lpthread
+		$(OBJ_DIR)/MP_DataManager.o \
+		$(OBJ_DIR)/MP_StorageManager.o \
+		-lrt -lpthread -lsqlite3
 
 build_obj:
 	gcc -c $(SRC_DIR)/SG_MainProcess.c -o $(OBJ_DIR)/SG_MainProcess.o $(C_FLAGS)
 	gcc -c $(SRC_DIR)/SG_LogProcess.c -o $(OBJ_DIR)/SG_LogProcess.o $(C_FLAGS)
 	gcc -c $(SRC_DIR)/MP_ConnectionManager.c -o $(OBJ_DIR)/MP_ConnectionManager.o $(C_FLAGS)
 	gcc -c $(SRC_DIR)/MP_DataSharing.c -o $(OBJ_DIR)/MP_DataSharing.o $(C_FLAGS)
+	gcc -c $(SRC_DIR)/MP_DataManager.c -o $(OBJ_DIR)/MP_DataManager.o $(C_FLAGS)
+	gcc -c $(SRC_DIR)/MP_StorageManager.c -o $(OBJ_DIR)/MP_StorageManager.o $(C_FLAGS)
 	gcc -c $(SRC_DIR)/main.c -o $(OBJ_DIR)/main.o $(C_FLAGS)
 
 clean:

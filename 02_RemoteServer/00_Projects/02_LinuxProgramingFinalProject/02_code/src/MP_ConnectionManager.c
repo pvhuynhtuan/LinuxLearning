@@ -41,6 +41,7 @@ void CM_Myip();
 void CM_Terminate(int id);
 
 void CM_StoreConnection(int fd, struct sockaddr_in addr);
+void CM_Close();
 
 #if (CM_ENABLE_CONNECT_FUNCTION == 1)
 void CM_Connect(char *des, int port);
@@ -60,7 +61,7 @@ int giConnectedIPCount;
 int giMyPort = 0;
 int giServer_fd;
 
-int volatile giCMRequesState = 1;
+int volatile giCMRequesState;
 
 /*******************************************************************************************
  * Function name: CM_MainThread
@@ -78,11 +79,13 @@ void *CM_MainThread(void * argv)
     CM_StartServer(*lpPort);
     while(giCMRequesState == 1)
     {
+        #if (CM_LOG_PRINT_ENABLE == 1)
         printf(YELLOW "\nConnection Manager > Info: port = %d" RESET "\n", giMyPort);
         CM_List();
+        #endif
         sleep(5);
     }
-    CM_Exit();
+    CM_Close();
 }
 
 /*******************************************************************************************
@@ -235,6 +238,80 @@ void *CM_ReadHandling(void *arg)
         {
             printf(GREEN "\nConnection Manager > Message from %s:%d > %s" RESET "\n", 
                 inet_ntoa(lsConnectionRead->address.sin_addr), ntohs(lsConnectionRead->address.sin_port), received_buffer);
+            
+            char *lpEndptr;
+            double ldTemp = strtod(received_buffer, &lpEndptr); 
+            if (received_buffer == lpEndptr)
+            {
+                printf("Connection Manager > Invalid data received!\n");
+            }
+            else
+            {
+                // Get the node ID
+                int liReceivedID = -1;
+                for (int index = 0; index < giConnectedIPCount; index++)
+                {
+                    // found the peer id
+                    if ((lsConnectionRead->address.sin_addr.s_addr == gsConnectedIPList[index].address.sin_addr.s_addr)
+                        && (lsConnectionRead->address.sin_port == gsConnectedIPList[index].address.sin_port))
+                    {
+                        liReceivedID = index;
+                    }
+                }
+
+                // Print the temperature
+                #if (CM_LOG_PRINT_ENABLE == 1)
+                printf("Connection Manager > Temperature: %f\n", ldTemp);
+                #endif
+
+                // Send data
+                SensorData_t lsSensorData;
+                lsSensorData.address = lsConnectionRead->address;
+                lsSensorData.SensorNodeID = liReceivedID;
+                lsSensorData.Temperature = ldTemp;
+
+                // Send data to Data Manager
+                #if (CM_SEND_DATASHARE_TO_DM_ENABLE == 1)
+                int liReturnValueDM = DS_QueuePush(lsSensorData, DS_DATA_MANAGER_PRIO);
+                #if (CM_LOG_PRINT_ENABLE == 1)
+                if (-1 == liReturnValueDM)
+                {
+                    printf("Connection Manager > Push the sensor data FAILED!\n");
+                    perror("Failed");
+                }
+                else
+                {
+                    printf("Connection Manager > Push the sensor data SUCCESS!\n");
+
+                    // Test read back
+                    SensorData_t lsReadbackDataDM;
+                    DS_QueueGet(&lsReadbackDataDM, DS_DATA_MANAGER_PRIO);
+                    printf("Connection Manager > Read back data = %f\n\n", lsReadbackDataDM.Temperature);
+                }
+                #endif /* End of #if (CM_LOG_PRINT_ENABLE == 1) */
+                #endif /* End of #if (CM_SEND_DATASHARE_TO_DM_ENABLE == 1) */
+
+                // Send data to Storage Manager
+                #if (CM_SEND_DATASHARE_TO_SM_ENABLE == 1)
+                int liReturnValueSM = DS_QueuePush(lsSensorData, DS_STORAGE_MANAGER_PRIO);
+                #if (CM_LOG_PRINT_ENABLE == 1)
+                if (-1 == liReturnValueSM)
+                {
+                    printf("Connection Manager > Push the sensor data FAILED!\n");
+                    perror("Failed");
+                }
+                else
+                {
+                    printf("Connection Manager > Push the sensor data SUCCESS!\n");
+
+                    // Test read back
+                    SensorData_t lsReadbackDataSM;
+                    DS_QueueGet(&lsReadbackDataSM, DS_STORAGE_MANAGER_PRIO);
+                    printf("Connection Manager > Read back data = %f\n\n", lsReadbackDataSM.Temperature);
+                }
+                #endif /* End of #if (CM_LOG_PRINT_ENABLE == 1) */
+                #endif /* End of #if (CM_SEND_DATASHARE_TO_SM_ENABLE == 1) */
+            }
         }
     }
 } /* End of function CM_ReadHandling */
@@ -332,13 +409,12 @@ void CM_Terminate(int id)
 } /* End of CM_Terminate function */
 
 /*******************************************************************************************
- * Function name: CM_Exit
+ * Function name: CM_Close
  * Functionality: Termindate all connection
  * Requirement: 
  ******************************************************************************************/
-void CM_Exit()
+void CM_Close()
 {
-    printf("Connection Manager > Exiting Connection Manager ...\n");
     //Req: 
     for (int index; index < giConnectedIPCount; index++)
     {
@@ -347,7 +423,7 @@ void CM_Exit()
     //Close the server
     close(giServer_fd);
     printf("Connection Manager > Exited!\n");
-} /* End of CM_Exit function */
+} /* End of CM_Close function */
 
 /*******************************************************************************************
  * Function name: CM_StoreConnection
@@ -537,3 +613,14 @@ void CM_Send(int id, char *message)
     printf("Connection Manager > %d bytes of message \"%s\" sent to peer %d!\n", bytes_send, message, id);
 } /* End of CM_Send function */
 #endif
+
+/*******************************************************************************************
+ * Function name: CM_Close
+ * Functionality: Termindate all connection
+ * Requirement: 
+ ******************************************************************************************/
+void CM_Exit()
+{
+    printf("Connection Manager > Exiting Connection Manager ...\n");
+    giCMRequesState = 0;
+} /* End of CM_Close function */

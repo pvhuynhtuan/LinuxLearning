@@ -19,6 +19,9 @@
 #define DM_MIN_WARNING_TEMPER           5
 #define DM_MAX_WARNING_TEMPER           30
 
+#define DM_LOG_REPORT_TOO_COLD          "The sensor node with <%d> reports it’s too cold (running avg temperature = <%f>)\n"
+#define DM_LOG_REPORT_TOO_HOT           "The sensor node with <%d> reports it’s too hot (running avg temperature = <%f>)\n"
+
 /********************************************************
 *                    TYPEDEF SECTION                    *
 ********************************************************/
@@ -78,13 +81,35 @@ void *DM_MainThread(void * argv)
 
             if (ldAverageTemper <= DM_MIN_WARNING_TEMPER)
             {
-                printf(RED "Data Manager > The sensor node with ID <%d> reports it’s too cold (running avg temperature = %f\n" RESET "\n",
-                    lsReadData.SensorNodeID, ldAverageTemper);
+                printf(RED DM_LOG_REPORT_TOO_COLD RESET "\n", lsReadData.SensorNodeID, ldAverageTemper);
+
+                /*************** Send the log *******************/
+                #if (DM_LOG_WRITER_ENABLE == 1)
+                // Create the buffer
+                char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+                memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+                
+                // Set the message
+                sprintf(lpFifoBuffer, DM_LOG_REPORT_TOO_COLD, lsReadData.SensorNodeID, ldAverageTemper);
+
+                write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
             }
             else if (ldAverageTemper >= DM_MAX_WARNING_TEMPER)
             {
-                printf(RED "Data Manager > The sensor node with ID <%d> reports it’s too hot (running avg temperature = %f\n" RESET "\n",
-                    lsReadData.SensorNodeID, ldAverageTemper);
+                printf(RED DM_LOG_REPORT_TOO_HOT RESET "\n", lsReadData.SensorNodeID, ldAverageTemper);
+
+                /*************** Send the log *******************/
+                #if (DM_LOG_WRITER_ENABLE == 1)
+                // Create the buffer
+                char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+                memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+                
+                // Set the message
+                sprintf(lpFifoBuffer, DM_LOG_REPORT_TOO_HOT, lsReadData.SensorNodeID, ldAverageTemper);
+
+                write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
             }
         }
         else

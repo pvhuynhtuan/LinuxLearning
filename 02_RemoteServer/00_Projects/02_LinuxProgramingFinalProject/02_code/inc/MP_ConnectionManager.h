@@ -23,6 +23,8 @@
 #define CM_SEND_DATASHARE_TO_DM_ENABLE      1   // Enable send data to Data Manager thread
 #define CM_SEND_DATASHARE_TO_SM_ENABLE      1   // Enable send data to Storage Manager thread
 
+#define CM_LOG_WRITER_ENABLE                1   // Enable the log data send to Log Process for writing to the file
+
 /********************************************************
 *                    TYPEDEF SECTION                    *
 ********************************************************/

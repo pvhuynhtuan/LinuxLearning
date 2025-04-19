@@ -10,12 +10,15 @@
 
 // Include user's header
 #include "main.h"
+#include "SG_MainProcess.h"
 #include "MP_ConnectionManager.h"
 #include "MP_DataSharing.h"
 
 /********************************************************
 *                     DEFINE SECTION                    *
 ********************************************************/
+#define CM_LOG_NEW_CONNECTION       "A sensor node with <%d> has opened a new connection, Address = %s, Port = %d\n"
+#define CM_LOG_CLOSED_CONNECTION    "The sensor node with <%d> has closed the connection, Address = %s, Port = %d\n"
 
 /********************************************************
 *                    TYPEDEF SECTION                    *
@@ -170,6 +173,7 @@ void *CM_ConnectionHandling(void *arg)
         }
 
         printf(YELLOW "\nConnection Manager > New client connected from %s:%d\n" RESET, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+
         // Store the accepted address
         CM_StoreConnection(liNewClientSocket_fd, client_addr);
 
@@ -223,6 +227,21 @@ void *CM_ReadHandling(void *arg)
                 printf(RED "\nConnection Manager > The peer ID = %d, address = %s is disconnected, removed from list!" RESET "\n",
                     liRemoveID, inet_ntoa(gsConnectedIPList[liRemoveID].address.sin_addr));
                 
+                /*************** Send the log *******************/
+                #if (CM_LOG_WRITER_ENABLE == 1)
+                // Create the buffer
+                char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+                memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+                
+                // Set the message
+                sprintf(lpFifoBuffer, CM_LOG_CLOSED_CONNECTION,
+                    liRemoveID, inet_ntoa(gsConnectedIPList[liRemoveID].address.sin_addr),
+                    ntohs(gsConnectedIPList[liRemoveID].address.sin_port)
+                );
+
+                write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
+
                 CM_Terminate(liRemoveID);
             }
             else
@@ -453,6 +472,21 @@ void CM_StoreConnection(int fd, struct sockaddr_in addr)
         // If the new connect is not existed in history, store new one
         if (giConnectedIPCount < CM_MAX_CONNECT_IP_SIZE)
         {
+            /*************** Send the log *******************/
+            #if (CM_LOG_WRITER_ENABLE == 1)
+            // Create the buffer
+            char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+            memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+            
+            // Set the message
+            sprintf(lpFifoBuffer, CM_LOG_NEW_CONNECTION,
+                giConnectedIPCount, inet_ntoa(addr.sin_addr),
+                ntohs(addr.sin_port)
+            );
+
+            write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+            #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
+
             gsConnectedIPList[giConnectedIPCount].socket_fd = fd;
             gsConnectedIPList[giConnectedIPCount].address = addr;
             giConnectedIPCount  = (giConnectedIPCount + 1) % CM_MAX_CONNECT_IP_SIZE;

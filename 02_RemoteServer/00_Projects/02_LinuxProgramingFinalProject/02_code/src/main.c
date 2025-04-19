@@ -11,7 +11,7 @@
 /********************************************************
 *                     DEFINE SECTION                    *
 ********************************************************/
-#define COMMAND_BUFFER_SIZE 1024
+#define COMMAND_BUFFER_SIZE             1024
 
 /********************************************************
 *                    TYPEDEF SECTION                    *
@@ -47,6 +47,12 @@ int main(int argc, char *argv[])
     {
         fprintf(stderr, "SG > Can't handle SIGTSTP\n");
         exit(EXIT_FAILURE);
+    }
+
+    // Create FIFO if it doesn't exist
+    if (mkfifo(SG_FIFO_FILENAME, 0666) == -1)
+    {
+        perror("SG > mkfifo");
     }
 
     //Req: SG-REQ-FNC-1

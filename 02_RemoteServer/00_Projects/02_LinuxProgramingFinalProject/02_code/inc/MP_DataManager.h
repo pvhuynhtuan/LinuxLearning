@@ -9,6 +9,7 @@
 *                     DEFINE SECTION                    *
 ********************************************************/
 #define DM_DEBUG_PRINT_ENABLE               0
+#define DM_LOG_WRITER_ENABLE                1
 
 /********************************************************
 *                    TYPEDEF SECTION                    *

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "main.h"
 #include "SG_LogProcess.h"
@@ -28,6 +29,11 @@ void LP_main()
 {
     int liReadBytes;
     char lpLogBuffer[SG_MAX_LOG_LENGTH];
+    char lpLogMessage[SG_MAX_LOG_LENGTH + 17];
+
+    time_t lsNow;
+    struct tm *lpTimeinfo;
+
     // Start the FIFO with the write only
     giReadFifoFD = open(SG_FIFO_FILENAME, O_RDONLY);
     if (-1 == giReadFifoFD)
@@ -50,19 +56,40 @@ void LP_main()
 
         //Read the data
         liReadBytes = read(giReadFifoFD, lpLogBuffer, SG_MAX_LOG_LENGTH);
-        if (liReadBytes == -1) {
+        if (liReadBytes == -1)
+        {
             printf("Log Process > read() failed\n");
             exit(0);
-        } else if (liReadBytes == 0) {
+        }
+        else if (liReadBytes == 0)
+        {
             printf("Log Process > pipe end-of-pipe\n");
             break;
-        } else {
+        }
+        else
+        {
             #if (LP_DEBUG_LOG_ENABLE == 1)
             printf("Log Process > msg: %s\n", lpLogBuffer);
             #endif
 
+            // Get current time for timestamp
+            time(&lsNow);
+            lpTimeinfo = localtime(&lsNow);
+
+            #if (LP_TIMESTAMP_ATTACH_ENABLE == 1)
+            sprintf(lpLogMessage, "[%02d-%02d-%04d;%02d-%02d] %s",
+                lpTimeinfo->tm_mday,
+                lpTimeinfo->tm_mon,
+                lpTimeinfo->tm_year,
+                lpTimeinfo->tm_hour,
+                lpTimeinfo->tm_min,
+                lpLogBuffer);
+            // Write the line to the file
+            ssize_t liBytesWritten = write(giLogFileFD, lpLogMessage, strlen(lpLogMessage));
+            #else
             // Write the line to the file
             ssize_t liBytesWritten = write(giLogFileFD, lpLogBuffer, strlen(lpLogBuffer));
+            #endif
             if (-1 == liBytesWritten) {
                 perror(RED "Log Process > Failed to write to file" RESET "\n");
                 close(liBytesWritten);

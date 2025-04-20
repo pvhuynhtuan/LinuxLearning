@@ -5,6 +5,7 @@
 *                     DEFINE SECTION                    *
 ********************************************************/
 #define LP_DEBUG_LOG_ENABLE                 1 /* Enable the debug print log */
+#define LP_TIMESTAMP_ATTACH_ENABLE          1
 
 /********************************************************
 *                    TYPEDEF SECTION                    *

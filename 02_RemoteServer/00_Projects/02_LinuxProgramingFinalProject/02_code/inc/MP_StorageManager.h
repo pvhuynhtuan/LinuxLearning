@@ -9,6 +9,7 @@
 *                     DEFINE SECTION                    *
 ********************************************************/
 #define SM_DEBUG_PRINT_ENABLE               1
+#define SM_LOG_WRITER_ENABLE                1
 
 /********************************************************
 *                    TYPEDEF SECTION                    *

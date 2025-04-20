@@ -17,6 +17,11 @@
 
 #define SM_SQL_INSERTORUPDATE_QUERY_FORMAT "INSERT INTO Nodes (Id, Address, Port, Temperature) VALUES (%d, '%s', %d, %lf) ON CONFLICT(Id) DO UPDATE SET Address=excluded.Address, Port=excluded.Port, Temperature=excluded.Temperature;"
 
+#define SM_LOG_CONNECTED_DB                 "Connection to SQL server established.\n"
+#define SM_LOG_CREATED_NEWTABLE             "New table <Nodes> created.\n"
+#define SM_LOG_DISCONNECTED_DB              "Connection to SQL server lost.\n"
+#define SM_LOG_FAILED_CONNECT_DB            "Unable to connect to SQL server.\n"
+
 /********************************************************
 *                    TYPEDEF SECTION                    *
 ********************************************************/
@@ -67,12 +72,34 @@ void *SM_MainThread(void * argv)
             if (SM_MAX_OPEN_DB_TIMES <= liOpenDbTimes)
             {
                 printf("Storage Manager > Cannot open DB: %s\n", sqlite3_errmsg(gsDataBase));
+                /*************** Send the log *******************/
+                #if (SM_LOG_WRITER_ENABLE == 1)
+                // Create the buffer
+                char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+                memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+                
+                // Set the message
+                sprintf(lpFifoBuffer, SM_LOG_FAILED_CONNECT_DB);
+
+                write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
+
                 pthread_exit(NULL); // Exit the thread (T.B.D, try to send out something to force other thread exit)
             }
         }
         else
         {
-            // Do nothing
+            /*************** Send the log *******************/
+            #if (SM_LOG_WRITER_ENABLE == 1)
+            // Create the buffer
+            char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+            memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+            
+            // Set the message
+            sprintf(lpFifoBuffer, SM_LOG_CONNECTED_DB);
+
+            write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+            #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
         }
     } while (SQLITE_OK != liReturnValue);
 
@@ -86,6 +113,18 @@ void *SM_MainThread(void * argv)
     else
     {
         printf("Storage Manager > SQL table created successfully!\n");
+
+        /*************** Send the log *******************/
+        #if (SM_LOG_WRITER_ENABLE == 1)
+        // Create the buffer
+        char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+        memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+        
+        // Set the message
+        sprintf(lpFifoBuffer, SM_LOG_CREATED_NEWTABLE);
+
+        write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+        #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
     }
 
     // Loop for reading the queue
@@ -117,6 +156,18 @@ void *SM_MainThread(void * argv)
             {
                 printf("Storage Manager > SQL error (INSERT): %s\n", lpErrMsg);
                 sqlite3_free(lpErrMsg);
+
+                /*************** Send the log *******************/
+                #if (SM_LOG_WRITER_ENABLE == 1)
+                // Create the buffer
+                char lpFifoBuffer[SG_MAX_LOG_LENGTH];
+                memset(lpFifoBuffer, 0, SG_MAX_LOG_LENGTH);
+                
+                // Set the message
+                sprintf(lpFifoBuffer, SM_LOG_DISCONNECTED_DB);
+
+                write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
             }
             else
             {

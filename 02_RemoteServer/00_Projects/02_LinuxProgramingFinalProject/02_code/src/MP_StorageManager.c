@@ -81,7 +81,9 @@ void *SM_MainThread(void * argv)
                 // Set the message
                 sprintf(lpFifoBuffer, SM_LOG_FAILED_CONNECT_DB);
 
+                pthread_mutex_lock(&gsFifoWriteMutex);
                 write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                pthread_mutex_unlock(&gsFifoWriteMutex);
                 #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
 
                 pthread_exit(NULL); // Exit the thread (T.B.D, try to send out something to force other thread exit)
@@ -98,7 +100,9 @@ void *SM_MainThread(void * argv)
             // Set the message
             sprintf(lpFifoBuffer, SM_LOG_CONNECTED_DB);
 
+            pthread_mutex_lock(&gsFifoWriteMutex);
             write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+            pthread_mutex_unlock(&gsFifoWriteMutex);
             #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
         }
     } while (SQLITE_OK != liReturnValue);
@@ -123,7 +127,9 @@ void *SM_MainThread(void * argv)
         // Set the message
         sprintf(lpFifoBuffer, SM_LOG_CREATED_NEWTABLE);
 
+        pthread_mutex_lock(&gsFifoWriteMutex);
         write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+        pthread_mutex_unlock(&gsFifoWriteMutex);
         #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
     }
 
@@ -166,7 +172,9 @@ void *SM_MainThread(void * argv)
                 // Set the message
                 sprintf(lpFifoBuffer, SM_LOG_DISCONNECTED_DB);
 
+                pthread_mutex_lock(&gsFifoWriteMutex);
                 write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                pthread_mutex_unlock(&gsFifoWriteMutex);
                 #endif /* End of #if (SM_LOG_WRITER_ENABLE == 1) */
             }
             else

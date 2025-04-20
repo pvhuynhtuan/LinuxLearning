@@ -92,7 +92,9 @@ void *DM_MainThread(void * argv)
                 // Set the message
                 sprintf(lpFifoBuffer, DM_LOG_REPORT_TOO_COLD, lsReadData.SensorNodeID, ldAverageTemper);
 
+                pthread_mutex_lock(&gsFifoWriteMutex);
                 write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                pthread_mutex_unlock(&gsFifoWriteMutex);
                 #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
             }
             else if (ldAverageTemper >= DM_MAX_WARNING_TEMPER)
@@ -108,7 +110,9 @@ void *DM_MainThread(void * argv)
                 // Set the message
                 sprintf(lpFifoBuffer, DM_LOG_REPORT_TOO_HOT, lsReadData.SensorNodeID, ldAverageTemper);
 
+                pthread_mutex_lock(&gsFifoWriteMutex);
                 write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                pthread_mutex_unlock(&gsFifoWriteMutex);
                 #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
             }
         }

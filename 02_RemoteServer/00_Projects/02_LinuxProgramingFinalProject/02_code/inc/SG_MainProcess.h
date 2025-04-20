@@ -20,6 +20,7 @@
 *         GLOBAL VARIABLE DECLARATION SECTION           *
 ********************************************************/
 extern pthread_mutex_t gsShareDataMutex;
+extern pthread_mutex_t gsFifoWriteMutex;
 extern int giWriteFifoFD;
 
 /********************************************************

@@ -29,7 +29,10 @@ void LP_main()
 {
     int liReadBytes;
     char lpLogBuffer[SG_MAX_LOG_LENGTH];
-    char lpLogMessage[SG_MAX_LOG_LENGTH + 17];
+    
+    #if (LP_TIMESTAMP_ATTACH_ENABLE == 1)
+    char lpLogMessage[SG_MAX_LOG_LENGTH + 19];
+    #endif
 
     time_t lsNow;
     struct tm *lpTimeinfo;
@@ -77,10 +80,10 @@ void LP_main()
             lpTimeinfo = localtime(&lsNow);
 
             #if (LP_TIMESTAMP_ATTACH_ENABLE == 1)
-            sprintf(lpLogMessage, "[%02d-%02d-%04d;%02d-%02d] %s",
+            sprintf(lpLogMessage, "[%02d-%02d-%04d;%02d:%02d] %s",
                 lpTimeinfo->tm_mday,
-                lpTimeinfo->tm_mon,
-                lpTimeinfo->tm_year,
+                lpTimeinfo->tm_mon + 1, //is zero-based (January = 0), so you need to add +1.
+                lpTimeinfo->tm_year + 1900, //is years since 1900, so add +1900.
                 lpTimeinfo->tm_hour,
                 lpTimeinfo->tm_min,
                 lpLogBuffer);

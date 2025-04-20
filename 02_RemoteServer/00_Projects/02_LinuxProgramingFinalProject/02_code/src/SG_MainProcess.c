@@ -18,6 +18,7 @@ pthread_t gsDataManagerTID;
 pthread_t gsStorageManagerTID;
 
 pthread_mutex_t gsShareDataMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t gsFifoWriteMutex = PTHREAD_MUTEX_INITIALIZER;
 
 int giWriteFifoFD;
 
@@ -57,9 +58,12 @@ void MP_main(int port)
     pthread_join(gsDataManagerTID, NULL);
     pthread_join(gsStorageManagerTID, NULL);
 
+    // Close the Data/Resourse
     DS_Close();
     pthread_mutex_destroy(&gsShareDataMutex);
+    pthread_mutex_destroy(&gsFifoWriteMutex);
     close(giWriteFifoFD);
+    
     exit(EXIT_SUCCESS);
 }
 

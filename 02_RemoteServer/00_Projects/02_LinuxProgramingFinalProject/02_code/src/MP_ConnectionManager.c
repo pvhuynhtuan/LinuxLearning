@@ -239,7 +239,9 @@ void *CM_ReadHandling(void *arg)
                     ntohs(gsConnectedIPList[liRemoveID].address.sin_port)
                 );
 
+                pthread_mutex_lock(&gsFifoWriteMutex);
                 write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+                pthread_mutex_unlock(&gsFifoWriteMutex);
                 #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
 
                 CM_Terminate(liRemoveID);
@@ -484,7 +486,9 @@ void CM_StoreConnection(int fd, struct sockaddr_in addr)
                 ntohs(addr.sin_port)
             );
 
+            pthread_mutex_lock(&gsFifoWriteMutex);
             write(giWriteFifoFD, lpFifoBuffer, strlen(lpFifoBuffer) + 1);
+            pthread_mutex_unlock(&gsFifoWriteMutex);
             #endif /* End of #if (CM_LOG_WRITER_ENABLE == 1) */
 
             gsConnectedIPList[giConnectedIPCount].socket_fd = fd;

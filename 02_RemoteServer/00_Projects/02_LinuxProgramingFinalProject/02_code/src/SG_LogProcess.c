@@ -82,8 +82,8 @@ void LP_main()
             #if (LP_TIMESTAMP_ATTACH_ENABLE == 1)
             sprintf(lpLogMessage, "[%02d-%02d-%04d;%02d:%02d] %s",
                 lpTimeinfo->tm_mday,
-                lpTimeinfo->tm_mon + 1, //is zero-based (January = 0), so you need to add +1.
-                lpTimeinfo->tm_year + 1900, //is years since 1900, so add +1900.
+                lpTimeinfo->tm_mon, //is zero-based (January = 0), so you need to add +1.
+                lpTimeinfo->tm_year, //is years since 1900, so add +1900.
                 lpTimeinfo->tm_hour,
                 lpTimeinfo->tm_min,
                 lpLogBuffer);

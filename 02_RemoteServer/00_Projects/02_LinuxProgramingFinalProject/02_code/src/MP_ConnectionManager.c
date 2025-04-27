@@ -26,6 +26,7 @@
 typedef struct
 {
     int socket_fd;
+    time_t connectedTime;
     struct sockaddr_in address;
 } Connection_t;
 
@@ -84,8 +85,8 @@ void *CM_MainThread(void * argv)
     {
         #if (CM_LOG_PRINT_ENABLE == 1)
         printf(YELLOW "\nConnection Manager > Info: port = %d" RESET "\n", giMyPort);
-        CM_List();
         #endif
+        CM_List();
         sleep(5);
     }
     CM_Close();
@@ -172,14 +173,15 @@ void *CM_ConnectionHandling(void *arg)
             continue;
         }
 
-        printf(YELLOW "\nConnection Manager > New client connected from %s:%d\n" RESET, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
-
         // Store the accepted address
         CM_StoreConnection(liNewClientSocket_fd, client_addr);
 
         // Create the structure to pass through the thread
         lsHandlingConnection.socket_fd = liNewClientSocket_fd;
         lsHandlingConnection.address = client_addr;
+        lsHandlingConnection.connectedTime = time(NULL);
+        printf(YELLOW "\nConnection Manager > New client connected from %s:%d\n" RESET "\n", inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+        printf("Connection Manager > connected time = %s\n", ctime(&lsHandlingConnection.connectedTime));
 
         // Create a new thread for the client read
         pthread_t client_thread;
@@ -390,11 +392,23 @@ void CM_Myip()
  ******************************************************************************************/
 void CM_List()
 {
+    time_t lsCurrentTime;
+    double lsConnectedTime;
+
     printf("Connection Manager > Total connecting node: %d\n", giConnectedIPCount);
     for (int index = 0; index < giConnectedIPCount; index++)
     {
-        printf("\tID = %d; Address = %s, port = %d\n", index, inet_ntoa(gsConnectedIPList[index].address.sin_addr),
-            ntohs(gsConnectedIPList[index].address.sin_port));
+        // Get the current time and calculate the connected time
+        time(&lsCurrentTime);
+        lsConnectedTime = (double)lsCurrentTime - (double)gsConnectedIPList[index].connectedTime;
+
+        printf("\tID = %d; Address = %s, port = %d; Connected time: %f; Elapsed time: %f\n",
+            index, 
+            inet_ntoa(gsConnectedIPList[index].address.sin_addr),
+            ntohs(gsConnectedIPList[index].address.sin_port),
+            (double)(gsConnectedIPList[index].connectedTime),
+            lsConnectedTime
+        );
     }
     printf("\n");
 } /* End of function CM_List */

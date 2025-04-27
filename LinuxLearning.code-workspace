@@ -5,6 +5,9 @@
         },
         {
             "path": "02_RemoteServer"
+        },
+        {
+            "path": "03_DriversDevelopment"
         }
     ],
     "settings": {

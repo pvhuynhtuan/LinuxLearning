@@ -26,6 +26,7 @@
 ********************************************************/
 void Signal_Handler_SIGTSTP(int num);
 void SG_Exit();
+void SG_PrintCpuUsage();
 
 /********************************************************
 *         GLOBAL VARIABLE DECLARATION SECTION           *
@@ -69,7 +70,7 @@ int main(int argc, char *argv[])
         // This is the parent process
         while(1)
         {
-            //printf("Parent process: Show something about system!\n");
+            SG_PrintCpuUsage();
             sleep(5);
         }
     }
@@ -121,3 +122,69 @@ void SG_Exit()
     }
     exit(EXIT_SUCCESS);
 }
+
+/*******************************************************************************************
+ * Function name: SG_PrintCpuUsage
+ * Functionality: The thread function of Data Manager
+ * Functionality - How to calculate the CPU usage: 
+ * These numbers are ever-increasing. You can't tell "current usage" from just one snapshot. But if you:
+ * Take a first reading (e.g. idle1, total1)
+ * Wait a moment (e.g. 1 second)
+ * Take a second reading (idle2, total2)
+ * Calculate the deltas:
+ *       totald = total2 - total1
+ *       idled = idle2 - idle1
+ * Then:
+ *       cpu_usage = (1 - idled / totald) * 100.0
+ ******************************************************************************************/
+void SG_PrintCpuUsage()
+{
+    int liStatReadFd;
+    char lpReadBuffer[1024];
+    unsigned long long int lullUser, lullNice, lullSystem, lullIdle, lullIowait, lullIrq, lullSoftirq;
+    unsigned long long int lullPrevIdle, lullPrevTotal, lullIdleSecondRead, lullTotalSecondRead;
+
+    // First read
+    liStatReadFd = open("/proc/stat", O_RDONLY);
+    if (-1 == liStatReadFd)
+    {
+        perror("SG > open");
+        return;
+    }
+
+    read(liStatReadFd, lpReadBuffer, sizeof(lpReadBuffer) - 1);
+    close(liStatReadFd);
+
+    sscanf(lpReadBuffer, "cpu %llu %llu %llu %llu %llu %llu %llu", 
+        &lullUser, &lullNice, &lullSystem, &lullIdle, &lullIowait, &lullIrq, &lullSoftirq);
+
+    // Calculate the difference
+    lullPrevIdle = lullIdle + lullIowait;
+    lullPrevTotal = lullUser + lullNice + lullSystem + lullIdle + lullIowait + lullIrq + lullSoftirq;
+
+    sleep(1); // wait 1 second for system update the status
+
+    // Second read
+    memset(lpReadBuffer, 0, sizeof(lpReadBuffer));
+    liStatReadFd = open("/proc/stat", O_RDONLY);
+    if (-1 == liStatReadFd)
+    {
+        perror("SG > open");
+        return;
+    }
+
+    read(liStatReadFd, lpReadBuffer, sizeof(lpReadBuffer) - 1);
+    close(liStatReadFd);
+
+    sscanf(lpReadBuffer, "cpu %llu %llu %llu %llu %llu %llu %llu", 
+        &lullUser, &lullNice, &lullSystem, &lullIdle, &lullIowait, &lullIrq, &lullSoftirq);
+
+    lullIdleSecondRead = lullIdle + lullIowait;
+    lullTotalSecondRead = lullUser + lullNice + lullSystem + lullIdle + lullIowait + lullIrq + lullSoftirq;
+
+    // Calculate the difference
+    double ldTotal = lullTotalSecondRead - lullPrevTotal;
+    double ldIdle = lullIdleSecondRead - lullPrevIdle;
+
+    printf("SG > CPU Usage: %.2f%%\n", (1.0 - ldIdle / ldTotal) * 100.0);
+} /* End of SG_PrintCpuUsage function */

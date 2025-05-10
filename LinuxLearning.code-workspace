@@ -8,6 +8,9 @@
         },
         {
             "path": "03_DriversDevelopment"
+        },
+        {
+            "path": "04_YoctoSelfLearning"
         }
     ],
     "settings": {

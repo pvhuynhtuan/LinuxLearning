@@ -10,19 +10,34 @@
 #include <linux/fs.h> /* define alloc_chrdev_region(), register_chrdev_region() */
 #include <linux/device.h> /* Define device_create(), class_create() */
 #include <linux/cdev.h> /* Define cdev_init(), cdev_add() */
+#include <linux/io.h>
 
 #define DRIVER_AUTHOR       "huynhtuan pvhuynhtuan@gmail.com"
-#define DRIVER_DESC         "This is the example for driver module - Major/minor number"
+#define DRIVER_DESC         "This is the example for driver module - GPIOLegacyDriver"
 #define DRIVER_VERS         "1.0"
 
-#define DRIVER_DEVICE_NUM_NAME  "my_HT_cdev"
-#define DRIVER_DEVICE_NAME  "my_HT_device"
+#define DRIVER_DEVICE_NUM_NAME  "GPIOLegacyDriver_cdev"
+#define DRIVER_DEVICE_NAME  "GPIOLegacyDriver"
 
-#define NPAGES  1
+#define DRIVER_GPFSEL2_ADDRESS  0x3F200008  // Physical addess: 0x7E200008
+#define DRIVER_GPSET0_ADDRESS   0x3F20001C  // Physical addess: 0x7E20001C
+#define DRIVER_GPCLR0_ADDRESS   0x3F200028  // Physical addess: 0x7E200028
+
+#define DRIVER_FSEL_PIN27_MASK  7UL
+#define DRIVER_FSEL_PIN27_ORDER  21
+
+#define DRIVER_SET_PIN27_MASK   1UL
+#define DRIVER_SET_PIN27_ORDER   27
+
+#define DRIVER_CLR_PIN27_MASK   1UL
+#define DRIVER_CLR_PIN27_ORDER   27
+
+static void __iomem *gpio_gpfsel2;
+static void __iomem *gpio_gpset0;
+static void __iomem *gpio_gpclr0;
 
 struct m_foo_dev {
-    uint32_t size;
-    char *kmalloc_ptr;
+    char level;
     dev_t dev_num;
     struct class *m_class;
     struct cdev m_cdev;
@@ -51,12 +66,12 @@ static struct file_operations fops =
 /* Constructor */
 static int __init chdev_init(void)
 {
-    pr_info("FileOperation.ko > Hello world kernel module!\n");
+    pr_info("GPIOLegacyDriver.ko > Hello world kernel module!\n");
 
     /* 1.0 Dynamic allocating device number (cat /proc/devices) */
     if (alloc_chrdev_region(&mdev.dev_num, 0, 1, DRIVER_DEVICE_NUM_NAME) < 0)
     {
-        pr_err("FileOperation.ko > Failed to alloc chrdev region\n");
+        pr_err("GPIOLegacyDriver.ko > Failed to alloc chrdev region\n");
         return -1;
     }
 
@@ -64,20 +79,20 @@ static int __init chdev_init(void)
     // dev_t dev = MKDEV(173, 0);
     // register_chrdev_region(&mdev.dev_num, 1, DRIVER_DEVICE_NUM_NAME);
 
-    pr_info("FileOperation.ko > Major = %d, Minor = %d\n", MAJOR(mdev.dev_num), MINOR(mdev.dev_num));
+    pr_info("GPIOLegacyDriver.ko > Major = %d, Minor = %d\n", MAJOR(mdev.dev_num), MINOR(mdev.dev_num));
 
     /* 2.0. Create Struct Class */
     //if ((mdev.m_class = class_create(THIS_MODULE, "m_class")) == NULL)
     if ((mdev.m_class = class_create("m_class")) == NULL) // new kernel version
     {
-        pr_err("FileOperation.ko > Cannot create the struct class for my device\n");
+        pr_err("GPIOLegacyDriver.ko > Cannot create the struct class for my device\n");
         goto rm_class;
     }
 
     /* 3.0. Creating device */
     if ((device_create(mdev.m_class, NULL, mdev.dev_num, NULL, DRIVER_DEVICE_NAME)) == NULL)
     {
-        pr_err("FileOperation.ko > Cannot create my device\n");
+        pr_err("GPIOLegacyDriver.ko > Cannot create my device\n");
         goto rm_device_numb;
     }
 
@@ -87,18 +102,32 @@ static int __init chdev_init(void)
     /* 4.1. Adding character devide to system */
     if ((cdev_add(&mdev.m_cdev, mdev.dev_num, 1)) < 0)
     {
-        pr_err("FileOperation.ko > Cannot add the device to system\n");
+        pr_err("GPIOLegacyDriver.ko > Cannot add the device to system\n");
         goto rm_device;
     }
 
-    mdev.kmalloc_ptr = kmalloc(NPAGES * PAGE_SIZE, GFP_KERNEL);
-    if (mdev.kmalloc_ptr == NULL)
+    gpio_gpfsel2 = ioremap(DRIVER_GPFSEL2_ADDRESS, 4);
+    if (gpio_gpfsel2 == NULL)
     {
-        pr_err("FileOperation.ko > kmalloc failed\n");
+        pr_err("GPIOLegacyDriver.ko > ioremap failed!\n");
         goto rm_device;
     }
 
-    pr_info("FileOperation.ko > End init!\n");
+    int value = readl(gpio_gpfsel2);
+    value &= ~(DRIVER_FSEL_PIN27_MASK << DRIVER_FSEL_PIN27_ORDER);
+    value |= (int)(0x01UL << DRIVER_FSEL_PIN27_ORDER);
+
+    writel(value, gpio_gpfsel2);
+    pr_info("GPIOLegacyDriver.ko > Wrote value to GPFSEL2: %#x\n", readl(gpio_gpfsel2));
+
+    // mdev.kmalloc_ptr = kmalloc(NPAGES * PAGE_SIZE, GFP_KERNEL);
+    // if (mdev.kmalloc_ptr == NULL)
+    // {
+    //     pr_err("GPIOLegacyDriver.ko > kmalloc failed\n");
+    //     goto rm_device;
+    // }
+
+    pr_info("GPIOLegacyDriver.ko > End init!\n");
     return 0;
 
 rm_device:
@@ -116,67 +145,69 @@ static void __exit chdev_exit(void)
     device_destroy(mdev.m_class, mdev.dev_num);
     class_destroy(mdev.m_class);
     unregister_chrdev_region(mdev.dev_num, 1);
-    pr_info("FileOperation.ko > Goodbye!\n");
+    pr_info("GPIOLegacyDriver.ko > Goodbye!\n");
 }
 
 // This function will be called when we open the Device File
 static int m_open(struct inode *inode, struct file *file)
 {
-    pr_info("FileOperation.ko > System Call open() was called!\n");
+    pr_info("GPIOLegacyDriver.ko > System Call open() was called!\n");
     return 0;
 }
 
 // This function will be called when we close the Device File
 static int m_release(struct inode *inode, struct file *file)
 {
-    pr_info("FileOperation.ko > System Call close() was called!\n");
+    pr_info("GPIOLegacyDriver.ko > System Call close() was called!\n");
     return 0;
 }
 
 // Read API
 static ssize_t m_read(struct file *filp, char __user *user_buf, size_t size, loff_t * offset)
 {
-    size_t to_read;
-
-    pr_info("FileOperation.ko > System Call read() called!\n");
-
-    /* Check size doesn't exceed our mapped area size */
-    to_read = (size > mdev.size - *offset) ? (mdev.size - *offset) : size;
-
-    /* Copy from mapped area to user buffer */
-    if (copy_to_user(user_buf, mdev.kmalloc_ptr + *offset, to_read) != 0)
-    {
-        return -EFAULT;
-    }
-
-    *offset += to_read;
-
-    return to_read;
+    pr_info("GPIOLegacyDriver.ko > System Call read() called!\n");
+    return 1;
 }
 
 // Write API
 static ssize_t m_write(struct file *filp, const char *user_buf, size_t size, loff_t * offset)
 {
-    size_t to_write;
-
-    pr_info("FileOperation.ko > System Call write() called!\n");
-
-    /* Check size doesn't exceed our mapped area size */
-    to_write = (size + *offset > NPAGES * PAGE_SIZE) ? (NPAGES * PAGE_SIZE - *offset) : size;
+    pr_info("GPIOLegacyDriver.ko > System Call write() called!\n");
 
     /* Copy from user buffer to mapped area */
-    memset(mdev.kmalloc_ptr, 0, NPAGES * PAGE_SIZE);
-    if (copy_from_user(mdev.kmalloc_ptr + *offset, user_buf, to_write) != 0)
+    memset(&mdev.level, 0, 1);
+    if (copy_from_user(&mdev.level, user_buf, size) != 0)
     {
         return -EFAULT;
     }
 
-    pr_info("FileOperation.ko > Data from user: %s\n", mdev.kmalloc_ptr);
+    pr_info("GPIOLegacyDriver.ko > Data from user: %d\n", mdev.level);
 
-    *offset += to_write;
-    mdev.size = *offset;
+    gpio_gpset0 = ioremap(DRIVER_GPSET0_ADDRESS, 4);
+    if (gpio_gpset0 == NULL)
+    {
+        pr_err("GPIOLegacyDriver.ko > ioremap failed!\n");
+    }
 
-    return to_write;
+    gpio_gpclr0 = ioremap(DRIVER_GPCLR0_ADDRESS, 4);
+    if (gpio_gpclr0 == NULL)
+    {
+        pr_err("GPIOLegacyDriver.ko > ioremap failed!\n");
+    }
+
+    if (mdev.level == 1)
+    {
+        pr_info("GPIOLegacyDriver.ko > LED on\n");
+        writel(DRIVER_SET_PIN27_MASK << DRIVER_SET_PIN27_ORDER, gpio_gpset0);
+    }
+    else
+    {
+        pr_info("GPIOLegacyDriver.ko > LED off\n");
+        writel(DRIVER_CLR_PIN27_MASK << DRIVER_CLR_PIN27_ORDER, gpio_gpclr0);
+    }
+    
+
+    return 1;
 }
 
 module_init(chdev_init);

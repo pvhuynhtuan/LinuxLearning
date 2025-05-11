@@ -32,7 +32,17 @@
             "inet.h": "c",
             "mp_datamanager.h": "c",
             "sstream": "c",
-            "__node_handle": "c"
+            "__node_handle": "c",
+            "__hash_table": "c",
+            "__split_buffer": "c",
+            "array": "c",
+            "bitset": "c",
+            "deque": "c",
+            "initializer_list": "c",
+            "queue": "c",
+            "stack": "c",
+            "unordered_map": "c",
+            "vector": "c"
         }
     }
 }

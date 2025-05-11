@@ -1,5 +1,5 @@
 /*
-* sudo dmesg -W                 ==> Show the kernel log
+* sudo dmesg -w                 ==> Show the kernel log
 * sudo insmod <.ko file>        ==> install the driver
 * sudo rmmod <.ko file>         ==> Remove the driver
 */
@@ -16,7 +16,11 @@
 #define DRIVER_DEVICE_NUM_NAME  "my_HT_cdev"
 #define DRIVER_DEVICE_NAME  "my_HT_device"
 
+#define NPAGES  1
+
 struct m_foo_dev {
+    uint32_t size;
+    char *kmalloc_ptr;
     dev_t dev_num;
     struct class *m_class;
     struct cdev m_cdev;
@@ -118,6 +122,50 @@ static int m_release(struct inode *inode, struct file *file)
 {
     pr_info("FileOperation.ko > System Call close() was called!\n");
     return 0;
+}
+
+// Read API
+static ssize_t m_read(struct file *filp, char __user *user_buf, size_t size, loff_t * offset)
+{
+    size_t to_read;
+
+    pr_info("FileOperation.ko > System Call read() called!\n");
+
+    /* Check size doesn't exceed our mapped area size */
+    to_read = (size > mdev.size - *offset) ? (mdev.size - *offset) : size;
+
+    /* Copy from mapped area to user buffer */
+    if (copy_to_user(user_buf, mdev.kmalloc_ptr + *offset, to_read) != 0)
+    {
+        return -EFAULT;
+    }
+
+    *offset += to_read;
+
+    return to_read;
+}
+
+// Write API
+static ssize_t m_write(struct file *filp, const char *user_buf, size_t size, loff_t * offset)
+{
+    size_t to_write;
+
+    pr_info("FileOperation.ko > System Call write() called!\n");
+
+    /* Check size doesn't exceed our mapped area size */
+    to_write = (size + *offset > NPAGES * PAGE_SIZE) ? (NPAGES * PAGE_SIZE - *offset) : size;
+
+    /* Copy from user buffer to mapped area */
+    memset(mdev.kmalloc_ptr + *offset, user_buf, to_write);
+    if (copy_from_user(mdev.kmalloc_ptr + *offset, user_buf, to_write) != 0)
+    {
+        return -EFAULT;
+    }
+
+    *offset += to_write;
+    mdev.size = *offset;
+
+    return to_write;
 }
 
 module_init(chdev_init);

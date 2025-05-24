@@ -19,7 +19,7 @@
 #define DRIVER_DEVICE_NUM_NAME  "GPIOSubSystemDriver_cdev"
 #define DRIVER_DEVICE_NAME  "GPIOSubSystemDriver"
 
-#define DRIVER_GPIO_NUMBER      27
+#define DRIVER_GPIO_NUMBER      539  // Adjusted for base 512
 #define DRIVER_GPIO_HIGH        1
 #define DRIVER_GPIO_LOW         0
 
@@ -94,12 +94,13 @@ static int __init chdev_init(void)
     }
 
     // Configure GPIO27 as output
-    if(gpio_request(DRIVER_GPIO_NUMBER, "gpio_27"))
+    if(gpio_request(DRIVER_GPIO_NUMBER, "gpio_27") != 0)
     {
         pr_err("GPIOSubSystemDriver.ko > Failed to request GPIO %d\n", DRIVER_GPIO_NUMBER);
         goto rm_device;
     }
-    if (gpio_direction_output(DRIVER_GPIO_NUMBER, DRIVER_GPIO_HIGH))
+
+    if (gpio_direction_output(DRIVER_GPIO_NUMBER, DRIVER_GPIO_HIGH) != 0)
     {
         pr_err("GPIOSubSystemDriver.ko > Failed to set GPIO direction\n");
         gpio_free(DRIVER_GPIO_NUMBER);

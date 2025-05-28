@@ -7,13 +7,10 @@
 */
 
 #include <linux/module.h> /* Define module_init(), module_exit() */
-#include <linux/gpio.h>
 #include <linux/fs.h> /* define alloc_chrdev_region(), register_chrdev_region() */
 #include <linux/device.h> /* Define device_create(), class_create() */
 #include <linux/cdev.h> /* Define cdev_init(), cdev_add() */
-#include <linux/platform_device.h> /* For platform devices */
-#include <linux/gpio/consumer.h> /* For GPIO descriptor */
-#include <linux/of.h> /* for DT */
+#include <linux/gpio.h>
 
 #define DRIVER_AUTHOR       "huynhtuan pvhuynhtuan@gmail.com"
 #define DRIVER_DESC         "This is the example for driver module - GPIOSubSystemDriver - Interger Based"
@@ -22,19 +19,9 @@
 #define DRIVER_DEVICE_NUM_NAME  "GPIOSubSystemDriver_cdev"
 #define DRIVER_DEVICE_NAME  "GPIOSubSystemDriver"
 
-/******** For GPIO *********/
-//#define DRIVER_GPIO_NUMBER      539  // Adjusted for base 512
+#define DRIVER_GPIO_NUMBER      539  // Adjusted for base 512
 #define DRIVER_GPIO_HIGH        1
 #define DRIVER_GPIO_LOW         0
-
-struct gpio_desc *gpio_27;
-
-static const struct of_device_id gpiod_dt_ids[] =
-{
-    { .compatible = "gpio-descriptor-based", },
-    { /* sentinel */ }
-};
-/**************************/
 
 struct m_foo_dev {
     char level;
@@ -50,20 +37,6 @@ static int m_open(struct inode *inode, struct file *file);
 static int m_release(struct inode *inode, struct file *file);
 static ssize_t m_read(struct file *filp, char __user *user_buf, size_t size, loff_t * offset);
 static ssize_t m_write(struct file *filp, const char *user_buf, size_t size, loff_t * offset);
-
-static int gpiosubsystem_driver_probe(struct platform_device *pdev);
-static void gpiosubsystem_driver_remove(struct platform_device *pdev);
-
-static struct platform_driver gpiosubsystem =
-{
-    .probe = gpiosubsystem_driver_probe,
-    .remove = gpiosubsystem_driver_remove,
-    .driver = {
-        .name = "gpio-descriptor-based",
-        .of_match_table = of_match_ptr(gpiod_dt_ids),
-        .owner = THIS_MODULE,
-    },
-};
 
 static struct file_operations fops =
 {
@@ -120,11 +93,18 @@ static int __init chdev_init(void)
         goto rm_device;
     }
 
-    /* USER CODE */
-    if (platform_driver_register(&gpiosubsystem))
+    // Configure GPIO27 as output
+    if(gpio_request(DRIVER_GPIO_NUMBER, "gpio_27") != 0)
     {
-        pr_err("GPIOSubSystemDriver.ko > Failed to register platform driver\n");
-        return -ENODEV;
+        pr_err("GPIOSubSystemDriver.ko > Failed to request GPIO %d\n", DRIVER_GPIO_NUMBER);
+        goto rm_device;
+    }
+
+    if (gpio_direction_output(DRIVER_GPIO_NUMBER, DRIVER_GPIO_HIGH) != 0)
+    {
+        pr_err("GPIOSubSystemDriver.ko > Failed to set GPIO direction\n");
+        gpio_free(DRIVER_GPIO_NUMBER);
+        goto rm_device;
     }
 
     pr_info("GPIOSubSystemDriver.ko > End init!\n");
@@ -145,8 +125,7 @@ static void __exit chdev_exit(void)
     device_destroy(mdev.m_class, mdev.dev_num);
     class_destroy(mdev.m_class);
     unregister_chrdev_region(mdev.dev_num, 1);
-    // Unregister platform driver
-    platform_driver_unregister(&gpiosubsystem);
+    gpio_free(DRIVER_GPIO_NUMBER);
     pr_info("GPIOSubSystemDriver.ko > Goodbye!\n");
 }
 
@@ -188,42 +167,20 @@ static ssize_t m_write(struct file *filp, const char *user_buf, size_t size, lof
     if (mdev.level == 1)
     {
         pr_info("GPIOSubSystemDriver.ko > LED on\n");
-        gpiod_set_value(gpio_27, DRIVER_GPIO_HIGH);
+        gpio_set_value(DRIVER_GPIO_NUMBER, DRIVER_GPIO_HIGH);
     }
     else
     {
         pr_info("GPIOSubSystemDriver.ko > LED off\n");
-        gpiod_set_value(gpio_27, DRIVER_GPIO_LOW);
+        gpio_set_value(DRIVER_GPIO_NUMBER, DRIVER_GPIO_LOW);
     }
     
 
     return 1;
 }
 
-static int gpiosubsystem_driver_probe(struct platform_device *pdev)
-{
-    struct device *dev = &pdev-> dev;
-    pr_info("GPIOSubSystemDriver.ko > driver probe!\n");
-
-    // set gpio 27 to high
-    gpio_27 = gpiod_get(dev, "led27", GPIOD_OUT_LOW);
-    gpiod_set_value(gpio_27, DRIVER_GPIO_HIGH);
-
-    return 0;
-}
-
-static void gpiosubsystem_driver_remove(struct platform_device *pdev)
-{
-    pr_info("GPIOSubSystemDriver.ko > driver remove!\n");
-
-    gpiod_set_value(gpio_27, DRIVER_GPIO_LOW);
-    gpiod_put(gpio_27);
-}
-
 module_init(chdev_init);
 module_exit(chdev_exit);
-
-//module_platform_driver(gpiosubsystem);
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR(DRIVER_AUTHOR);

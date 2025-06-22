@@ -26,6 +26,7 @@
 #include <linux/fb.h>   /* for frame buffer */
 #include <linux/dma-mapping.h> /* For DMA */
 #include <linux/dmaengine.h>
+#include <linux/vmalloc.h> /* For Non-DMA */
 
 #include <linux/delay.h>
 #include <linux/kthread.h>
@@ -50,8 +51,7 @@
 #define ILI9341_CDEV_CREATION   ILI9341_OFF
 #define ILI9341_FB_CREATION     ILI9341_ON
 
-#define ILI9341_FB_DMA_ENABLE   ILI9341_ON
-#define ILI9341_FB_IMAGEBLIT_ENABLE ILI9341_ON
+#define ILI9341_FB_DMA_ENABLE   ILI9341_OFF
 
 
 /*****************************************************************************
@@ -72,7 +72,7 @@
 #define GPIO_HIGH               1
 
 /* SPI Speed */
-#define ILI9341_SPI_SPEED       8000000
+#define ILI9341_SPI_SPEED       16000000
 
 /* LCD modes */
 #define ILI9341_MODE_CMD        0
@@ -82,7 +82,8 @@
 #define ILI9341_TFTHEIGHT       240 ///< ILI9341 max TFT height
 #define ILI9341_BIT_PER_PIXEL   16
 
-#define ILI9341_FB_SIZE_RAW     ((ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT * ILI9341_BIT_PER_PIXEL) / 8) // = 153600
+#define ILI9341_FB_SIZE_RAW     (ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT * ((ILI9341_BIT_PER_PIXEL +7) / 8)) //Round-up the byte
+
 #define ILI9341_BUFFER_SIZE     PAGE_ALIGN(ILI9341_FB_SIZE_RAW) // = 155648
 
 /******************************************************************************
@@ -187,6 +188,8 @@ typedef struct ILI9341_SPIModule {
     struct fb_info *pFbInfo;
     #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
     dma_addr_t sDmaHandle;        // DMA bus address
+    #else
+    unsigned int iPagesCount;
     #endif
     #endif
 } ILI9341_SPIModule_t;
@@ -216,24 +219,21 @@ static int ILI9341_FbSetColReg(unsigned regno, unsigned red, unsigned green, uns
 static int ILI9341_FbMmap(struct fb_info *info, struct vm_area_struct *vma);
 static void ILI9341_FbFillRect(struct fb_info *info, const struct fb_fillrect *rect);
 static void ILI9341_FbCopyArea(struct fb_info *info, const struct fb_copyarea *region);
-#if (ILI9341_FB_IMAGEBLIT_ENABLE == ILI9341_ON)
 static void ILI9341_FbImageBlit(struct fb_info *info, const struct fb_image *image);
-#endif
 static int ILI9341_FbBlank(int blank_mode, struct fb_info *info);
-#if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
 static void ILI9341_DeferredIo(struct fb_info *info, struct list_head *pagelist);
-static void ILI9341_FbDmaFlush(ILI9341_SPIModule_t *lpModule);
+#if (ILI9341_FB_DMA_ENABLE == ILI9341_OFF)
+static int ILI9341_VideoAlloc(ILI9341_SPIModule_t *lpModule);
 #endif
-#endif
+#endif /* End of #if (ILI9341_FB_CREATION == ILI9341_ON) */
 
 static int ILI9341_SpiProbe(struct spi_device *lpSpi);
 static void ILI9341_SpiRemove(struct spi_device *lpSpi);
 
 // The function to control the LCD
-#if (ILI9341_FB_CREATION == ILI9341_ON)
 #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
-static int ILI9341_SpiWriteDma(void *lpBuf, size_t liLen);
-#endif
+static void spi_dma_done(void *context);
+static void ILI9341_SpiDmaFlush(ILI9341_SPIModule_t *lpModule);
 #endif
 static int ILI9341_SpiSendByte(bool lbIsData, unsigned char lcData);
 static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned int liLen);
@@ -310,7 +310,11 @@ static struct fb_fix_screeninfo gsFbFixScreenInfo =
     .xpanstep = 0, /* zero if no hardware panning */
     .ypanstep = 0, /* zero if no hardware panning */
     .ywrapstep = 0, /* zero if no hardware ywrap */
-    .line_length = ILI9341_TFTWIDTH * 3, /* length of a line in bytes */
+    #if (ILI9341_BIT_PER_PIXEL == 16)
+    .line_length = (ILI9341_TFTWIDTH * ILI9341_BIT_PER_PIXEL) / 8, /* length of a line in bytes */
+    #else
+    .line_length = (ILI9341_TFTWIDTH * 3), /* length of a line in bytes */
+    #endif
 };
 
 /*
@@ -332,20 +336,15 @@ static struct fb_ops gsFbOps =
     .fb_mmap = ILI9341_FbMmap, /* perform fb specific mmap */
     .fb_fillrect = ILI9341_FbFillRect, /* Draws a rectangle */
     .fb_copyarea = ILI9341_FbCopyArea, /* Copy data from area to another */
-#if (ILI9341_FB_IMAGEBLIT_ENABLE == ILI9341_ON)
     .fb_imageblit = ILI9341_FbImageBlit, /* Draws a image to the display */
-#endif
     .fb_blank = ILI9341_FbBlank, /* blank display */
 };
 
-#if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
 static struct fb_deferred_io gsILI9341DefIo =
 {
-    .delay = HZ / 20,               // 50 ms
+    .delay = HZ / 50,               // 50 ms
     .deferred_io = ILI9341_DeferredIo,
 };
-#endif
-
 #endif /* End of #if (ILI9341_FB_CREATION == ILI9341_ON) */
 
 /*****************************************************************************************
@@ -499,12 +498,34 @@ static int ILI9341_CreateFbFile(ILI9341_SPIModule_t *lpModule)
 
     lpModule->pFbInfo->fix.smem_start = lpModule->sDmaHandle;
     lpModule->pFbInfo->fix.smem_len = ILI9341_BUFFER_SIZE;
+    #else
+    /* Non-DMA virtual memory creation */
+    if(ILI9341_VideoAlloc(lpModule) < 0)
+    {
+        pr_err("[%s - %d] > Create Virtual Memory - Non-DMA failed\n", __func__, __LINE__);
+        goto LABEL_RM_FB;
+    }
+    else
+    {
+        // Do nothing
+    }
+    // Store the allocated memory start address
+    lpModule->pFbInfo->screen_base =
+        (char __iomem *)lpModule->pFbInfo->fix.smem_start;
+    // pr_info("[%s - %d] > Create virtual memory success: screen_base=%d, smem_start=%d!\n",
+    //     __func__, __LINE__,
+    //     (unsigned int)lpModule->pFbInfo->screen_base,
+    //     (unsigned int)lpModule->pFbInfo->fix.smem_start);
+    #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
 
     lpModule->pFbInfo->fbdefio = &gsILI9341DefIo;
-    fb_deferred_io_init(lpModule->pFbInfo);
-
+    if(fb_deferred_io_init(lpModule->pFbInfo) < 0)
+    {
+        pr_info("[%s - %d] > fb_deferred_io_init failed!\n", __func__, __LINE__);
+        goto LABEL_RM_FB;
+    }
     lpModule->pFbInfo->flags = FBINFO_HWACCEL_DISABLED | FBINFO_VIRTFB; // Defaut value
-    #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
+    
 
     if (register_framebuffer(lpModule->pFbInfo) < 0)
     {
@@ -584,121 +605,260 @@ static int ILI9341_FbSetColReg(unsigned regno, unsigned red, unsigned green, uns
 
 static int ILI9341_FbMmap(struct fb_info *info, struct vm_area_struct *vma)
 {
-    int liReturnValue;
     pr_info("[%s - %d] > System Call Memory Map was called!\n", __func__, __LINE__);
     
     #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
+    int liReturnValue;
     unsigned long lulVmStart = vma->vm_start;
+    void *lpScreenBase = gpModuleILI9341->pFbInfo->screen_base;
+    #endif
+
     unsigned long lulSize = vma->vm_end - vma->vm_start;
     unsigned long lulOffset = vma->vm_pgoff << PAGE_SHIFT;
-    unsigned long lilPfn;
-
-    void *lpScreenBase = gpModuleILI9341->pFbInfo->screen_base;
     size_t lsSmemLen   = gpModuleILI9341->pFbInfo->fix.smem_len;
     
+    // Check the boundary address
     if ((lulOffset > lsSmemLen) || (lulSize > (lsSmemLen - lulOffset)))
     {
         pr_err("[%s - %d] > mmap out of bounds: offset=%lu, size=%lu, smem_len=%lu\n",
             __func__, __LINE__, lulOffset, lulSize, lsSmemLen);
         return -EINVAL;
     }
-
-    lilPfn = virt_to_phys(lpScreenBase + lulOffset) >> PAGE_SHIFT;
-
-    // Set VMA page protection for non-cached memory (important for DMA)
-    vma->vm_page_prot = pgprot_noncached(vma->vm_page_prot);
-
-    // if ((vma->vm_end - vma->vm_start) > lulSize)
-    // {
-    //     pr_err("[%s - %d] > wrong size %lu %lu %lu\n", __func__, __LINE__,
-    //         vma->vm_end, vma->vm_start, lulSize);
-    //     return -EINVAL;
-    // }
-
-    // vma->vm_flags = (vma->vm_flags | VM_IO | VM_DONTEXPAND | VM_DONTDUMP) & ~VM_MAYEXEC;
-    // vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
-
-    liReturnValue = remap_pfn_range(vma, lulVmStart, lilPfn, lulSize, vma->vm_page_prot);
-    if (0 != liReturnValue)
-    {
-        pr_err("[%s - %d] > remap_pfn_range failed: %d\n", __func__, __LINE__, liReturnValue);
-        return -EAGAIN;
-    }
     else
     {
-        // Do nothing
+        pr_info("[%s - %d] > mmap: offset=%lu, size=%lu, smem_len=%lu\n",
+            __func__, __LINE__, lulOffset, lulSize, lsSmemLen);
     }
-    // ILI9341_FbDmaFlush(gpModuleILI9341);
-    pr_info("[%s - %d] > Success!\n", __func__, __LINE__);
-    #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
 
-    return 0;
+    return fb_deferred_io_mmap(gpModuleILI9341->pFbInfo, vma);
 }
-
-#if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
-static void ILI9341_DeferredIo(struct fb_info *info, struct list_head *pagelist)
-{
-    pr_info("[%s - %d] > deferred_io: triggering SPI+DMA update\n", __func__, __LINE__);
-    // Call your display update function here
-    // spi_fb_update(gpModuleILI9341);
-}
-
-static void ILI9341_FbDmaFlush(ILI9341_SPIModule_t *lpModule)
-{
-    struct dma_async_tx_descriptor *lpTxDesc;
-    dma_addr_t lsDmaSrc = (dma_addr_t)lpModule->pFbInfo->screen_base;
-
-    // Setup SPI/DMA transfer here using your SPI controller’s DMA engine
-    ILI9341_SpiWriteDma((void *)lsDmaSrc, ILI9341_BUFFER_SIZE);
-}
-#endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
 
 static void ILI9341_FbFillRect(struct fb_info *info, const struct fb_fillrect *rect)
 {
     pr_info("[%s - %d] > System Call was called!\n", __func__, __LINE__);
+    
+    uint8_t *lpDst;
+    int liBpp = ((info->var.bits_per_pixel + 7) / 8); // Round-up the byte data
+    uint32_t lulColor = rect->color;
+    int liLineLen = info->fix.line_length;
+    uint8_t lpColorBuf[4];  // Max size for 32bpp color
+    
+    pr_info("[%s - %d] > width = %d, height = %d\n",
+        __func__, __LINE__, rect->width, rect->height);
+    pr_info("[%s - %d] > image->dx = %d, image->dy = %d\n",
+        __func__, __LINE__, rect->dx, rect->dy);
+        
+    // Prepare color buffer for memcpy
+    memcpy(lpColorBuf, (void *)&lulColor, liBpp);
+
+    for (int y = 0; y < rect->height; y++)
+    {
+        lpDst = info->screen_base + (rect->dy + y) * liLineLen + rect->dx * liBpp;
+
+        for (int x = 0; x < rect->width; x++)
+        {
+            memcpy(lpDst + x * liBpp, lpColorBuf, liBpp);
+        }
+    }
+        
+    struct fb_deferred_io *lpFbDefIo = info->fbdefio;
+	if (lpFbDefIo)
+    {
+		/* Schedule the deferred IO to kick in after a delay.*/
+		schedule_delayed_work(&info->deferred_work, lpFbDefIo->delay);
+	}
 }
 
 static void ILI9341_FbCopyArea(struct fb_info *info, const struct fb_copyarea *region)
 {
     pr_info("[%s - %d] > System Call was called!\n", __func__, __LINE__);
+    int liBpp = ((info->var.bits_per_pixel + 7) / 8); // Round-up the byte data
+    int liLineLen = info->fix.line_length;
+    uint8_t *lpSrc, *lpDst;
+
+    int liBytesPerLine = region->width * liBpp;
+
+    pr_info("[%s - %d] > width = %d, height = %d\n",
+        __func__, __LINE__, region->width, region->height);
+    pr_info("[%s - %d] > region->sx = %d, region->sy = %d, region->dx = %d, region->dy = %d\n",
+        __func__, __LINE__, region->sx, region->sy, region->dx, region->dy);
+
+    if (region->sy < region->dy)
+    {
+        // Copy bottom-up to avoid overwrite
+        for (int y = region->height - 1; y >= 0; y--)
+        {
+            lpSrc = info->screen_base +
+                  (region->sy + y) * liLineLen +
+                  region->sx * liBpp;
+
+            lpDst = info->screen_base +
+                  (region->dy + y) * liLineLen +
+                  region->dx * liBpp;
+
+            memmove(lpDst, lpSrc, liBytesPerLine);
+        }
+    }
+    else
+    {
+        // Copy top-down
+        for (int y = 0; y < region->height; y++)
+        {
+            lpSrc = info->screen_base +
+                  (region->sy + y) * liLineLen +
+                  region->sx * liBpp;
+
+            lpDst = info->screen_base +
+                  (region->dy + y) * liLineLen +
+                  region->dx * liBpp;
+
+            memmove(lpDst, lpSrc, liBytesPerLine);
+        }
+    }
+        
+    struct fb_deferred_io *lpFbDefIo = info->fbdefio;
+	if (lpFbDefIo)
+    {
+		/* Schedule the deferred IO to kick in after a delay.*/
+		schedule_delayed_work(&info->deferred_work, lpFbDefIo->delay);
+	}
 }
 
-#if (ILI9341_FB_IMAGEBLIT_ENABLE == ILI9341_ON)
 static void ILI9341_FbImageBlit(struct fb_info *info, const struct fb_image *image)
 {
-    pr_info("[%s - %d] > System Call was called!\n", __func__, __LINE__);
+    int liBit;
+    uint8_t *lpDst;
+    const uint8_t *lpSrc;
+    int liLineLen = info->fix.line_length;
+    // uint32_t lulFgColor = image->fg_color;
+    // uint32_t lulBgColor = image->bg_color;
+    uint32_t lulFgColor = 0xFFFF;
+    uint32_t lulBgColor = 0x0000;
+    uint32_t lulBpp = ((info->var.bits_per_pixel + 7) / 8);
     
-    int liSizePicture = image->width * image->height * image->depth;
-    pr_info("[%s - %d] > liSizePicture = %d\n", __func__, __LINE__, liSizePicture);
+    // pr_info("[%s - %d] > width = %d, height = %d, depth = %d\n",
+    //     __func__, __LINE__, image->width, image->height, image->depth);
+    // pr_info("[%s - %d] > lulFgColor = %d, lulBgColor = %d, lulBpp = %d, depth=%d\n",
+    //     __func__, __LINE__, lulFgColor, lulBgColor, lulBpp, image->depth);
+    // pr_info("[%s - %d] > image->dy = %d, image->dx = %d\n",
+    //     __func__, __LINE__, image->dy, image->dx);
+        
+    if (image->depth == 1) {
+        // Monochrome bitmap: each bit is a pixel
+        for (int y = 0; y < image->height; y++)
+        {
+            lpSrc = image->data + y * image->width / 8;
+            lpDst = info->screen_base +
+                (image->dy + y) * liLineLen +
+                image->dx * lulBpp;
 
-    // ILI9341_SPIModule_t *lpModule = fb_get_drvdata(lpInfo);
-    char *lpDataPtr = kmalloc(liSizePicture, GFP_KERNEL);
+            for (int x = 0; x < image->width; x++)
+            {
+                liBit = lpSrc[x / 8] & (0x80 >> (x % 8));  // MSB-first bit unpacking
 
-    /* Copy from user buffer to mapped area */
-    memset(lpDataPtr, 0, liSizePicture);
-    if (copy_from_user(lpDataPtr, image->data, liSizePicture) != 0)
-    {
-        kfree(lpDataPtr);
-        return;
+                uint32_t lulColor = liBit ? lulFgColor : lulBgColor;
+
+                switch (lulBpp)
+                {
+                case 1:
+                    *(uint8_t *)(lpDst + x) = lulColor;
+                    break;
+                case 2:
+                    *(uint16_t *)(lpDst + x * 2) = lulColor;
+                    break;
+                case 4:
+                    *(uint32_t *)(lpDst + x * 4) = lulColor;
+                    break;
+                default:
+                    pr_warn("Unsupported bpp: %d\n", lulBpp * 8);
+                    return;
+                }
+            }
+        }
     }
-
-    // Send Data to LCD
-    pr_info("[%s - %d] > Send Data to LCD!\n", __func__, __LINE__);
-    ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
-    for (int liIndex = 0; liIndex < liSizePicture; liIndex++)
+    else
     {
-        ILI9341_SpiSendByte(ILI9341_MODE_DATA, lpDataPtr[liIndex]);
-    }
+        // For color bitmaps, just copy pixel data
+        int liBytesPerPixel = image->depth / 8;
 
-    kfree(lpDataPtr);
+        for (int y = 0; y < image->height; y++)
+        {
+            lpDst = info->screen_base +
+                  (image->dy + y) * liLineLen +
+                  image->dx * liBytesPerPixel;
+
+            lpSrc = image->data + y * image->width * liBytesPerPixel;
+
+            memcpy(lpDst, lpSrc, image->width * liBytesPerPixel);
+        }
+    }
+        
+    struct fb_deferred_io *lpFbDefIo = info->fbdefio;
+	if (lpFbDefIo)
+    {
+		/* Schedule the deferred IO to kick in after a delay.*/
+		schedule_delayed_work(&info->deferred_work, lpFbDefIo->delay);
+	}
+    
 }
-#endif /* End of #if (ILI9341_FB_IMAGEBLIT_ENABLE == ILI9341_ON) */
 
 static int ILI9341_FbBlank(int blank_mode, struct fb_info *info)
 {
     pr_info("[%s - %d] > System Call was called!\n", __func__, __LINE__);
     return 0;
 }
+
+static void ILI9341_DeferredIo(struct fb_info *info, struct list_head *pagelist)
+{
+    // pr_info("[%s - %d] > deferred_io: triggering SPI+DMA update\n", __func__, __LINE__);
+    // Call your display update function here
+
+    #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
+    ILI9341_SpiDmaFlush(gpModuleILI9341);
+    #else
+    ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
+    uint8_t *lpMemAddr = info->screen_base;
+    // Calculate the raw lenghth, not the buffer length
+    size_t lsLen = gpModuleILI9341->pFbInfo->var.yres * 
+        gpModuleILI9341->pFbInfo->fix.line_length;
+    
+    ILI9341_SpiSendArray(ILI9341_MODE_DATA, lpMemAddr, lsLen);
+    #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
+    // pr_info("[%s - %d] > deferred_io: completed\n", __func__, __LINE__);
+}
+
+#if (ILI9341_FB_DMA_ENABLE == ILI9341_OFF)
+static int ILI9341_VideoAlloc(ILI9341_SPIModule_t *lpModule)
+{
+    unsigned int liFrameSize;
+
+	pr_info("[%s - %d] > Initializing virtual memory...\n", __func__, __LINE__);
+
+	liFrameSize = lpModule->pFbInfo->fix.line_length * lpModule->pFbInfo->var.yres;
+	pr_info("[%s - %d] > liFrameSize=%u\n", __func__, __LINE__, liFrameSize);
+
+	lpModule->iPagesCount = liFrameSize / PAGE_SIZE;
+    // Rough the count
+	if ((lpModule->iPagesCount * PAGE_SIZE) < liFrameSize)
+    {
+		lpModule->iPagesCount++;
+	}
+    pr_info("[%s - %d] > iPagesCount=%u\n", __func__, __LINE__, lpModule->iPagesCount);
+
+	// lpModule->pFbInfo->fix.smem_len = ili->pages_count * PAGE_SIZE;
+	lpModule->pFbInfo->fix.smem_start =
+	    (unsigned long)vmalloc(lpModule->pFbInfo->fix.smem_len);
+	if (!lpModule->pFbInfo->fix.smem_start)
+    {
+        pr_err("[%s - %d] > unable to vmalloc\n", __func__, __LINE__);
+		return -ENOMEM;
+	}
+	memset((void *)lpModule->pFbInfo->fix.smem_start, 0,
+        lpModule->pFbInfo->fix.smem_len);
+
+	return 0;
+}
+#endif
 #endif /* End of #if (ILI9341_FB_CREATION == ILI9341_ON) */
 
 /*****************************************************************************************
@@ -779,6 +939,13 @@ static int ILI9341_SpiProbe(struct spi_device *lpSpi)
     
     pr_info("[%s - %d] > Probe success!\n", __func__, __LINE__);
     
+    /* Store driver data in SPI device */
+    spi_set_drvdata(lpSpi, lpModule);
+
+    /* USER CODE START */
+    ILI9341_DisplayInit(gpModuleILI9341);
+    pr_info("[%s - %d] > LCD Init success!\n", __func__, __LINE__);
+    
     /* Create device file */
     #if (ILI9341_CDEV_CREATION == ILI9341_ON)
     liReturnValue = ILI9341_CreateDeviceFile(lpModule);
@@ -812,13 +979,6 @@ static int ILI9341_SpiProbe(struct spi_device *lpSpi)
     #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
     dev_info(&lpModule->pSpiDev->dev, "  DMA addr: %pad\n", &lpModule->sDmaHandle);
     #endif
-    
-    /* Store driver data in SPI device */
-    spi_set_drvdata(lpSpi, lpModule);
-
-    /* USER CODE START */
-    ILI9341_DisplayInit(gpModuleILI9341);
-    pr_info("[%s - %d] > LCD Init success!\n", __func__, __LINE__);
     /* USER CODE END */
 
     return 0;
@@ -850,6 +1010,8 @@ static void ILI9341_SpiRemove(struct spi_device *lpSpi)
     #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
     dma_free_coherent(&lpModule->pSpiDev->dev, ILI9341_BUFFER_SIZE,
         &lpModule->pFbInfo->screen_base, lpModule->sDmaHandle);
+    #else
+    vfree(lpModule->pFbInfo->screen_base);
     #endif
     #endif
     
@@ -876,35 +1038,39 @@ MODULE_VERSION(DRIVER_VERS);
 /*****************************************************************************************
  * The function to control the LCD
  ****************************************************************************************/
-#if (ILI9341_FB_CREATION == ILI9341_ON)
 #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
 static void spi_dma_done(void *context)
 {
     pr_info("[%s - %d] > DMA SPI transfer completed!\n", __func__, __LINE__);
 }
 
-static int ILI9341_SpiWriteDma(void *lpBuf, size_t liLen)
+static void ILI9341_SpiDmaFlush(ILI9341_SPIModule_t *lpModule)
 {
-    pr_info("[%s - %d] > DMA SPI transfer start!\n", __func__, __LINE__);
-    struct spi_transfer lsSpiTransfer = {
-        .tx_buf = lpBuf,
-        .len = liLen,
-        .speed_hz = ILI9341_SPI_SPEED,
-        // .tx_dma = gpModuleILI9341->sDmaHandle;
-    };
+    pr_info("[%s - %d] > Dma Flush start!\n", __func__, __LINE__);
+    struct spi_transfer lsSpiTransfer = {0};
+    struct spi_message lsSpiMessage = {0};
+    
+    lsSpiTransfer.tx_buf = lpModule->pFbInfo->screen_base;
+    lsSpiTransfer.tx_dma = lpModule->pFbInfo->fix.smem_start;
+    lsSpiTransfer.len    = ILI9341_BUFFER_SIZE;
+    lsSpiTransfer.speed_hz  = ILI9341_SPI_SPEED;
 
     /* Set DC pin according to data mode */
     gpio_set_value(gpModuleILI9341->iDcPin, GPIO_HIGH);
 
-    struct spi_message lsSpiMessage;
-    lsSpiMessage.complete  = spi_dma_done;
     spi_message_init(&lsSpiMessage);
+    lsSpiMessage.complete  = spi_dma_done;
+    lsSpiMessage.context  = gpModuleILI9341;
     spi_message_add_tail(&lsSpiTransfer, &lsSpiMessage);
 
-    return spi_async(gpModuleILI9341->pSpiDev, &lsSpiMessage);  // or spi_async() if non-blocking
+    int liReturnValue = spi_async(lpModule->pSpiDev, &lsSpiMessage);
+    if (liReturnValue)
+    {
+        pr_info("[%s - %d] > spi_async failed: %d\n", __func__, __LINE__, liReturnValue);
+    }
+        
 }
 #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
-#endif /* End of #if (ILI9341_FB_CREATION == ILI9341_ON) */
 
  static int ILI9341_SpiSendByte(bool lbIsData, unsigned char lcData)
 {
@@ -922,7 +1088,7 @@ static int ILI9341_SpiWriteDma(void *lpBuf, size_t liLen)
     /* Set up transfer */
     lsSpiTransfer.tx_buf = &lcData;
     lsSpiTransfer.len = 1;
-    lsSpiTransfer.speed_hz = ILI9341_SPI_SPEED;  /* 4MHz */
+    lsSpiTransfer.speed_hz = ILI9341_SPI_SPEED;
     spi_message_add_tail(&lsSpiTransfer, &lsSpiMessage);
     
     /* Perform transfer */
@@ -959,7 +1125,7 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
     /* Set up transfer */
     lsSpiTransfer.tx_buf = lpData;
     lsSpiTransfer.len = liLen;
-    lsSpiTransfer.speed_hz = ILI9341_SPI_SPEED;  /* 4MHz */
+    lsSpiTransfer.speed_hz = ILI9341_SPI_SPEED;
     spi_message_add_tail(&lsSpiTransfer, &lsSpiMessage);
     
     /* Perform transfer */
@@ -1170,18 +1336,18 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
     /* INIT COMMAND SEQUENCE END */
 
     /* TESTING LCD START */
-    mdelay(100);  /* Allow LCD to stabilize */
-    ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
-    for (int i = 0; i < (ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT); i++)
-    {
-        unsigned char lowbyte = (unsigned char)(i & 0x00FF);
-        unsigned char highbyte = (unsigned char)((i >> 8) & 0x00FF);
-        // unsigned char lowbyte = 0xF8;
-        // unsigned char highbyte = 0x00;
-        ILI9341_SpiSendByte(ILI9341_MODE_DATA, lowbyte);
-        ILI9341_SpiSendByte(ILI9341_MODE_DATA, highbyte);
-        // mdelay(1);  /* Allow LCD to stabilize */
-    }
+    // mdelay(100);  /* Allow LCD to stabilize */
+    // ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
+    // for (int i = 0; i < (ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT); i++)
+    // {
+    //     unsigned char lowbyte = (unsigned char)(i & 0x00FF);
+    //     unsigned char highbyte = (unsigned char)((i >> 8) & 0x00FF);
+    //     // unsigned char lowbyte = 0xF8;
+    //     // unsigned char highbyte = 0x00;
+    //     ILI9341_SpiSendByte(ILI9341_MODE_DATA, lowbyte);
+    //     ILI9341_SpiSendByte(ILI9341_MODE_DATA, highbyte);
+    //     // mdelay(1);  /* Allow LCD to stabilize */
+    // }
     /* TESTING LCD END */
 
     return 0;

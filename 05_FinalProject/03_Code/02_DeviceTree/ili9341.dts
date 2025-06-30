@@ -17,6 +17,7 @@
                 spi-max-frequency = <20000000>;
                 reset-gpios = <&gpio 25 0>;  /* GPIO25 for RST */
                 dc-gpios = <&gpio 24 0>;     /* GPIO24 for DC */
+                buswidth = <8>;
 
                 // Required if you need DMA
                 dma-coherent;

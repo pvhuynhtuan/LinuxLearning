@@ -13,6 +13,14 @@
 * sudo rmmod <.ko file>         ==> Remove the driver
 * modprobe                      ==> load driver and dependancy (move ko file to /lib/module/$(uname -r)/extra )
 * sudo depmod                   ==> set the dependancy
+* Install by depmod:
+*   1. Copy the ko file to system:
+*       sudo mkdir -p /lib/modules/$(uname -r)/extra
+*       sudo cp ili9341.ko /lib/modules/$(uname -r)/extra/
+*   2. sudo depmod -a
+*   3. If the compatible = "ili9341", the default driver of ili9341 shal be install automatically
+*       ==> Remove ko file: kernel/drivers/staging/fbtft/fb_ili9341.ko.xz
+        ==> execute: "sudo depmod -a" again
 */
 
 #include <linux/init.h>
@@ -245,19 +253,19 @@ static int ILI9341_DisplayInit(ILI9341_SPIModule_t *module);
 static void ILI9341_DisplayDeinit(ILI9341_SPIModule_t *module);
 
 static const struct of_device_id ili9341_of_match_ids[] = {
-    { .compatible = "ili9341", 0 },
+    { .compatible = "custom,ili9341", 0 },
     { }  /* sentinel */
 };
 
 static const struct spi_device_id ili9341_spi_match_ids[] = {
-    { "ili9341", 0 },
+    { "custom,ili9341", 0 },
     { /* sentinel */ }
 };
 
 /* SPI driver structure */
 static struct spi_driver gsILI9341SpiDriver = {
     .driver = {
-        .name = "ili9341",
+        .name = "custom,ili9341",
         .owner = THIS_MODULE,
         .of_match_table = ili9341_of_match_ids,
     },
@@ -730,10 +738,10 @@ static void ILI9341_FbImageBlit(struct fb_info *info, const struct fb_image *ima
     uint8_t *lpDst;
     const uint8_t *lpSrc;
     int liLineLen = info->fix.line_length;
-    // uint32_t lulFgColor = image->fg_color;
-    // uint32_t lulBgColor = image->bg_color;
-    uint32_t lulFgColor = 0xFFFF;
-    uint32_t lulBgColor = 0x0000;
+    uint32_t lulFgColor = image->fg_color;
+    uint32_t lulBgColor = image->bg_color;
+    // uint32_t lulFgColor = 0xFFFF;
+    // uint32_t lulBgColor = 0x0000;
     uint32_t lulBpp = ((info->var.bits_per_pixel + 7) / 8);
     
     // pr_info("[%s - %d] > width = %d, height = %d, depth = %d\n",
@@ -743,8 +751,12 @@ static void ILI9341_FbImageBlit(struct fb_info *info, const struct fb_image *ima
     // pr_info("[%s - %d] > image->dy = %d, image->dx = %d\n",
     //     __func__, __LINE__, image->dy, image->dx);
         
-    if (image->depth == 1) {
+    if (image->depth == 1)
+    {
         // Monochrome bitmap: each bit is a pixel
+        // ==> Config the foreground/backgound color
+        lulFgColor = 0xFFFF;
+        lulBgColor = 0x0000;
         for (int y = 0; y < image->height; y++)
         {
             lpSrc = image->data + y * image->width / 8;

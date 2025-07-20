@@ -1,0 +1,24 @@
+The wlan is disable:
+    1. Using command "nmcli device status" to check the status of device.
+    2. If the wlan is show as "unavailable" => Check the status of blocking:
+        rfkill list
+    3. If the wireless blocker (soft/hard) ==> execute "sudo rfkill unblock all"
+    4. After that, bring interface up:
+        sudo ip link set wlan0 up
+        sudo nmcli radio wifi on
+        sudo nmcli device set wlan0 managed yes
+    5. Restart NetworkManager: "sudo systemctl restart NetworkManager"
+
+Setting the wireless connection:
+    1. Scan the wifi:
+        sudo nmcli device wifi list
+    2. Connect to the aim SSID:
+        sudo nmcli device wifi connect "YourSSID" password "YourPassword"
+        Or for no password: sudo nmcli device wifi connect "OpenSSID"
+    3. Verify:
+        nmcli device status
+        ip a show wlan0
+    4. Set automatic connect:
+        sudo nmcli connection modify YourSSID connection.autoconnect yes
+    5. Verify the list of connected:
+        sudo nmcli connection show

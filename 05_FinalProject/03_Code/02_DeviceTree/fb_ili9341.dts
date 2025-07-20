@@ -1,0 +1,48 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+    compatible = "brcm,bcm2835";
+
+    fragment@0 {
+        target = <&spi0>;
+        __overlay__ {
+            status = "okay";
+
+            ili9341: fb_ili9341@0 {
+                compatible = "ilitek,ili9341";
+                reg = <0>; /* SPI chip select 0 */
+                spi-max-frequency = <32000000>; /* Adjust as needed */
+
+                rotate = <90>; /* Rotation: 0, 90, 180, 270 */
+                fps = <60>;
+                buswidth = <8>; /* 8-bit parallel data interface via SPI */
+
+                reset-gpios = <&gpio 25 0>;  /* GPIO 25 as RESET */
+                dc-gpios = <&gpio 24 0>;     /* GPIO 24 as Data/Command */
+                led-gpios = <&gpio 18 0>;    /* Optional: GPIO 18 for backlight */
+
+                debug = <0>;
+            };
+        };
+    };
+
+    fragment@1 {
+        target = <&gpio>;
+        __overlay__ {
+            ili9341_pins: ili9341_pins {
+                brcm,pins = <18 24 25>;
+                brcm,function = <1 1 1>; /* All as output */
+            };
+        };
+    };
+
+    __overrides__ {
+        speed =       <&ili9341>,"spi-max-frequency:0";
+        rotate =      <&ili9341>,"rotate:0";
+        fps =         <&ili9341>,"fps:0";
+        reset_pin =   <&ili9341>,"reset-gpios:4";
+        dc_pin =      <&ili9341>,"dc-gpios:4";
+        led_pin =     <&ili9341>,"led-gpios:4";
+    };
+};

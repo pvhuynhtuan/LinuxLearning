@@ -21,6 +21,8 @@
 *   3. If the compatible = "ili9341", the default driver of ili9341 shal be install automatically
 *       ==> Remove ko file: kernel/drivers/staging/fbtft/fb_ili9341.ko.xz
         ==> execute: "sudo depmod -a" again
+* Kill all process which using the frame buffer device: sudo fuser -k /dev/fb1
+* Sample command to test screen: sudo fbi -T 1 -d /dev/fb1 -a -noverbose ~/FinalProject/00_Common/vietnam.jpg
 */
 
 #include <linux/init.h>
@@ -60,6 +62,9 @@
 #define ILI9341_FB_CREATION     ILI9341_ON
 
 #define ILI9341_FB_DMA_ENABLE   ILI9341_OFF
+
+#define ILI9341_FB_COLOR_SWAP   ILI9341_ON
+#define ILI9341_FB_LCD_TEST     ILI9341_OFF
 
 
 /*****************************************************************************
@@ -306,6 +311,28 @@ static struct fb_var_screeninfo gsFbVarScreenInfo =
     // .hsync_len, /* length of horizontal sync */
     // .vsync_len, /* length of vertical sync */
     // .rotate, /* angle we rotate counter clockwise */
+    #if (ILI9341_BIT_PER_PIXEL == 16)
+    .red.offset    = 11,
+    .red.length    = 5,
+
+    .green.offset  = 5,
+    .green.length  = 6,
+
+    .blue.offset   = 0,
+    .blue.length   = 5,
+
+    // .red.offset    = 0,
+    // .red.length    = 5,
+
+    // .green.offset  = 5,
+    // .green.length  = 6,
+
+    // .blue.offset   = 11,
+    // .blue.length   = 5,
+
+    .transp.offset = 0,
+    .transp.length = 0,
+    #endif
 };
 
 /*
@@ -596,6 +623,27 @@ static ssize_t ILI9341_FbWrite(struct fb_info *info, const char __user *buf, siz
 static int ILI9341_FbCheckVar(struct fb_var_screeninfo *var, struct fb_info *info)
 {
     pr_info("[%s - %d] > System Call Check Var was called!\n", __func__, __LINE__);
+    // Force the resolution (optional — allow dynamic settings if desired)
+    var->xres         = 320;
+    var->yres         = 240;
+    var->xres_virtual = 320;
+    var->yres_virtual = 240;
+    var->bits_per_pixel = 16;
+
+    // RGB565 format
+    var->red.offset   = 11;
+    var->red.length   = 5;
+    var->green.offset = 5;
+    var->green.length = 6;
+    var->blue.offset  = 0;
+    var->blue.length  = 5;
+
+    var->transp.offset = 0;
+    var->transp.length = 0;
+
+    // Set non-interlaced mode, progressive scan
+    var->vmode = FB_VMODE_NONINTERLACED;
+        
     return 0;
 }
 
@@ -608,6 +656,26 @@ static int ILI9341_FbSetPar(struct fb_info *info)
 static int ILI9341_FbSetColReg(unsigned regno, unsigned red, unsigned green, unsigned blue, unsigned transp, struct fb_info *info)
 {
     pr_info("[%s - %d] > System Call Set Color Register was called!\n", __func__, __LINE__);
+    // For true-color modes like RGB565, you usually don't need to store a palette.
+    // But fbcon and Qt still expect this function to exist and succeed.
+
+    if (regno >= 256) // Limit to standard 256 registers
+    {
+        return -EINVAL;
+    }
+
+    // If pseudo_palette is used (common in true-color), update it
+    if (info->fix.visual == FB_VISUAL_TRUECOLOR && info->pseudo_palette) {
+        uint16_t r = red >> (16 - info->var.red.length);
+        uint16_t g = green >> (16 - info->var.green.length);
+        uint16_t b = blue >> (16 - info->var.blue.length);
+
+        uint32_t value = (r << info->var.red.offset) |
+            (g << info->var.green.offset) |
+            (b << info->var.blue.offset);
+
+        ((uint32_t *)(info->pseudo_palette))[regno] = value;
+    }
     return 0;
 }
 
@@ -824,17 +892,31 @@ static void ILI9341_DeferredIo(struct fb_info *info, struct list_head *pagelist)
 {
     // pr_info("[%s - %d] > deferred_io: triggering SPI+DMA update\n", __func__, __LINE__);
     // Call your display update function here
+    uint8_t *lpMemAddr = info->screen_base;
+
+    // Calculate the raw lenghth, not the buffer length
+    size_t lsLen = gpModuleILI9341->pFbInfo->var.yres * 
+        gpModuleILI9341->pFbInfo->fix.line_length;
+
+    #if (ILI9341_FB_COLOR_SWAP == ILI9341_ON)
+    uint8_t *lpSwapBuf = kmalloc(lsLen, GFP_KERNEL);
+    for (int liIndex = 0; liIndex < lsLen; liIndex += 2)
+    {
+        lpSwapBuf[liIndex] = lpMemAddr[liIndex + 1];
+        lpSwapBuf[liIndex + 1] = lpMemAddr[liIndex];
+    }
+    #endif
 
     #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
     ILI9341_SpiDmaFlush(gpModuleILI9341);
     #else
     ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
-    uint8_t *lpMemAddr = info->screen_base;
-    // Calculate the raw lenghth, not the buffer length
-    size_t lsLen = gpModuleILI9341->pFbInfo->var.yres * 
-        gpModuleILI9341->pFbInfo->fix.line_length;
-    
+    #if (ILI9341_FB_COLOR_SWAP == ILI9341_ON)
+    ILI9341_SpiSendArray(ILI9341_MODE_DATA, lpSwapBuf, lsLen);
+    kfree(lpSwapBuf);
+    #else
     ILI9341_SpiSendArray(ILI9341_MODE_DATA, lpMemAddr, lsLen);
+    #endif
     #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
     // pr_info("[%s - %d] > deferred_io: completed\n", __func__, __LINE__);
 }
@@ -1084,7 +1166,7 @@ static void ILI9341_SpiDmaFlush(ILI9341_SPIModule_t *lpModule)
 }
 #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
 
- static int ILI9341_SpiSendByte(bool lbIsData, unsigned char lcData)
+static int ILI9341_SpiSendByte(bool lbIsData, unsigned char lcData)
 {
     int liReturnValue;
     struct spi_transfer lsSpiTransfer;
@@ -1127,6 +1209,13 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
     struct spi_transfer lsSpiTransfer;
     struct spi_message lsSpiMessage;
 
+    // for (size_t i = 0; i < liLen; i += 2)
+    // {
+    //     uint8_t high = lpData[i];
+    //     lpData[i] = lpData[i+1];
+    //     lpData[i+1] = high;
+    // }
+
     /* Set DC pin according to data/command mode */
     gpio_set_value(gpModuleILI9341->iDcPin, lbIsData ? GPIO_HIGH : GPIO_LOW);
     
@@ -1138,6 +1227,7 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
     lsSpiTransfer.tx_buf = lpData;
     lsSpiTransfer.len = liLen;
     lsSpiTransfer.speed_hz = ILI9341_SPI_SPEED;
+    lsSpiTransfer.bits_per_word = 8;
     spi_message_add_tail(&lsSpiTransfer, &lsSpiMessage);
     
     /* Perform transfer */
@@ -1259,11 +1349,10 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
 
     // Memory Access Control
     ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_MADCTL);  
-    ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0xE0);     // MY, MX, MV, RGB mode
+    ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0xE8);     // MY, MX, MV, RGB mode
 
     // Pixel Format Set
     ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_PIXFMT);  
-    
     #if (ILI9341_BIT_PER_PIXEL == 18)
     ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x66);     // 18-bit color  
     #elif (ILI9341_BIT_PER_PIXEL == 16)
@@ -1283,7 +1372,7 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
 
     // 3Gamma Function Disable
     ILI9341_SpiSendByte(ILI9341_MODE_CMD, 0xF2);  
-    ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x00);
+    ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x02);
 
     // Gamma Curve Selected
     ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_GAMMASET);  
@@ -1339,6 +1428,12 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
     ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x01);
     ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x3F);        // End row = 319 (320 pixels)
 
+    // Testint the interface control
+    // ILI9341_SpiSendByte(ILI9341_MODE_CMD, 0xF6);
+    // ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0xE0);
+    // ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x00);
+    // ILI9341_SpiSendByte(ILI9341_MODE_DATA, 0x0F);
+
     // Exit Sleep
     ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_SLPOUT);  
     msleep(120);
@@ -1348,18 +1443,50 @@ static int ILI9341_SpiSendArray(bool lbIsData, unsigned char * lpData, unsigned 
     /* INIT COMMAND SEQUENCE END */
 
     /* TESTING LCD START */
-    // mdelay(100);  /* Allow LCD to stabilize */
-    // ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
-    // for (int i = 0; i < (ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT); i++)
-    // {
-    //     unsigned char lowbyte = (unsigned char)(i & 0x00FF);
-    //     unsigned char highbyte = (unsigned char)((i >> 8) & 0x00FF);
-    //     // unsigned char lowbyte = 0xF8;
-    //     // unsigned char highbyte = 0x00;
-    //     ILI9341_SpiSendByte(ILI9341_MODE_DATA, lowbyte);
-    //     ILI9341_SpiSendByte(ILI9341_MODE_DATA, highbyte);
-    //     // mdelay(1);  /* Allow LCD to stabilize */
-    // }
+    #if (ILI9341_FB_LCD_TEST == ILI9341_ON)
+    mdelay(100);  /* Allow LCD to stabilize */
+
+    unsigned char byteData[2];
+    ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
+
+    uint16_t liTempData = 0x8000;
+    *((uint16_t *)byteData) = liTempData;
+    pr_info("[%s - %d] > liTempData=0x%04X; byteData[0]=0x%02X; byteData[1]=0x%02X !\n",
+        __func__, __LINE__, liTempData,byteData[0], byteData[1]);
+    for (int i = 0; i < (ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT); i++)
+    {
+        // if (i < ((ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT) / 3))
+        // {
+        //     byteData[1] = (unsigned char)(ILI9341_RED & 0x00FF);
+        //     byteData[0] = (unsigned char)((ILI9341_RED >> 8) & 0x00FF);
+        // }
+        // else if (i < (2 * ((ILI9341_TFTWIDTH * ILI9341_TFTHEIGHT) / 3)))
+        // {
+        //     byteData[1] = (unsigned char)(ILI9341_GREEN & 0x00FF);
+        //     byteData[0] = (unsigned char)((ILI9341_GREEN >> 8) & 0x00FF);
+        // }
+        // else
+        // {
+        //     byteData[1] = (unsigned char)(ILI9341_BLUE & 0x00FF);
+        //     byteData[0] = (unsigned char)((ILI9341_BLUE >> 8) & 0x00FF);
+        // }
+        
+        if ((i % 4800  == 0) && (i != 0))
+        {
+            liTempData >>= 1;
+            *((uint16_t *)byteData) = liTempData;
+            pr_info("[%s - %d] > liTempData=0x%04X; byteData[0]=0x%02X; byteData[1]=0x%02X !\n",
+                __func__, __LINE__, liTempData,byteData[0], byteData[1]);
+        }
+
+        // byteData[0] = 0x00; // High byte
+        // byteData[1] = 0x1F; // Low bye
+        // ILI9341_SpiSendArray(ILI9341_MODE_DATA, byteData, 2);
+        ILI9341_SpiSendByte(ILI9341_MODE_DATA, byteData[0]);
+        ILI9341_SpiSendByte(ILI9341_MODE_DATA, byteData[1]);
+    }
+    // mdelay(500);  /* Allow LCD pause to see the test */
+    #endif /* End of #if (ILI9341_FB_LCD_TEST == ILI9341_ON) */
     /* TESTING LCD END */
 
     return 0;

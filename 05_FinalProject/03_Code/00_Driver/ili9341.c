@@ -907,17 +907,20 @@ static void ILI9341_DeferredIo(struct fb_info *info, struct list_head *pagelist)
     }
     #endif
 
+    // Send the write ram data command
+    ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
+
+    // Send the data
     #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON)
     ILI9341_SpiDmaFlush(gpModuleILI9341);
-    #else
-    ILI9341_SpiSendByte(ILI9341_MODE_CMD, ILI9341_RAMWR);
+    #endif
+
     #if (ILI9341_FB_COLOR_SWAP == ILI9341_ON)
     ILI9341_SpiSendArray(ILI9341_MODE_DATA, lpSwapBuf, lsLen);
     kfree(lpSwapBuf);
     #else
     ILI9341_SpiSendArray(ILI9341_MODE_DATA, lpMemAddr, lsLen);
     #endif
-    #endif /* End of #if (ILI9341_FB_DMA_ENABLE == ILI9341_ON) */
     // pr_info("[%s - %d] > deferred_io: completed\n", __func__, __LINE__);
 }
 

@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/footer">
+        <file>footer.png</file>
+    </qresource>
+</RCC>

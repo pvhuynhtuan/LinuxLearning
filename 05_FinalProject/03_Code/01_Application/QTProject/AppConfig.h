@@ -13,4 +13,10 @@
 #define CPU_LOAD_PATH                       "/proc/loadavg"
 #define CPU_TEMPER_PATH                     "/sys/class/thermal/thermal_zone0/temp"
 
+#define RAM_USAGE_PATH                      "/proc/meminfo"
+#define RAM_TOTAL_PREFIX                    "MemTotal:"
+#define RAM_AVAILABLE_PREFIX                "MemAvailable:"
+#define SWAP_TOTAL_PREFIX                   "SwapTotal:"
+#define SWAP_FREE_PREFIX                    "SwapFree:"
+
 #endif // APPCONFIG_H

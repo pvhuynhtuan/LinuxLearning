@@ -58,7 +58,9 @@ cpuwindow::cpuwindow(QWidget *parent)
      * Note: In this time, the fixed paths are provided, need improve later if any
      */
     glTotalCpuInfo = new CpuInfoClass("cpu ", CPU_USAGE_PATH, CPU_LOAD_PATH, CPU_TEMPER_PATH);
+    #ifdef Q_OS_LINUX
     glTotalCpuInfo->CalculateCpuUsage(); // dummy read to start initial data
+    #endif
 
     int liCoreCount = QThread::idealThreadCount();
     if (liCoreCount > 0)
@@ -69,7 +71,9 @@ cpuwindow::cpuwindow(QWidget *parent)
             // Create the object information of CPU core
             QString lsPrefix = QString("cpu%1").arg(liIndex);
             CpuInfoClass *loCpuInfo = new CpuInfoClass(lsPrefix, CPU_USAGE_PATH, CPU_LOAD_PATH, CPU_TEMPER_PATH);
+            #ifdef Q_OS_LINUX
             loCpuInfo->CalculateCpuUsage(); // dummy read to start initial data
+            #endif
             glCpusInfo.append(loCpuInfo);
 
             // Create the series of CPU core
@@ -102,8 +106,6 @@ cpuwindow::~cpuwindow()
     glCpuSeries.clear();
     glCpusInfo.clear();
     delete gpCpuChart;
-    delete gpAxisX;
-    delete gpAxisY;
     delete ui;
 }
 
@@ -120,22 +122,30 @@ void cpuwindow::onTimerExceedGraph()
 
     for (int liIndex = 0; liIndex < glCpuSeries.size(); ++liIndex)
     {
+        #ifdef Q_OS_LINUX
         ldUsage = glCpusInfo[liIndex]->CalculateCpuUsage();
+        #elif defined(Q_OS_WIN)
+        ldUsage = rand() % 100; // Fake data for now => to test on the window
+        #endif
 
         //Checking the return value
-        if (ldUsage < 0)
+        if (0 <= ldUsage)
         {
-            ldUsage = rand() % 100; // Fake data for now => to test on the window
+            glCpuSeries[liIndex]->append(timeCounter, ldUsage);
+            if (CPU_MAX_POINTS < glCpuSeries[liIndex]->count())
+            {
+                glCpuSeries[liIndex]->removePoints(0, glCpuSeries[liIndex]->count() - CPU_MAX_POINTS);
+            }
+            else
+            {
+                // Do nothing
+            }
         }
         else
         {
             // Do nothing
         }
 
-        glCpuSeries[liIndex]->append(timeCounter, ldUsage);
-        if (glCpuSeries[liIndex]->count() > CPU_MAX_POINTS) {
-            glCpuSeries[liIndex]->removePoints(0, glCpuSeries[liIndex]->count() - CPU_MAX_POINTS);
-        }
     }
 
     // Keep only the last 60 points for each series
@@ -150,36 +160,51 @@ void cpuwindow::onTimerExceedInfo()
     double ldLoadAvg, ldTotalCpuUsage, ldTemper;
 
     // Display the Load Average
+    #ifdef Q_OS_LINUX
     ldLoadAvg = glTotalCpuInfo->CalculateLoadAverage();
-    if (ldLoadAvg < 0)
+    if (ldLoadAvg >= 0)
     {
-        ldLoadAvg = rand() % 10; // Fake data for now => to test on the window
+        ui->lbLoadAvg->setText(QString::number(ldLoadAvg, 'f', 2));
     }
     else
     {
         // Do nothing
     }
+    #elif defined(Q_OS_WIN)
+    ldLoadAvg = rand() % 10; // Fake data for now => to test on the window
     ui->lbLoadAvg->setText(QString::number(ldLoadAvg, 'f', 2));
+    #endif
 
+    // Display the CPU usage
+    #ifdef Q_OS_LINUX
     ldTotalCpuUsage = glTotalCpuInfo->CalculateCpuUsage();
-    if (ldTotalCpuUsage < 0)
+    if (ldTotalCpuUsage >= 0)
     {
-        ldTotalCpuUsage = rand() % 100; // Fake data for now => to test on the window
+        ui->lbTotalCpuUsage->setText(QString::number(ldTotalCpuUsage, 'f', 2));
     }
     else
     {
         // Do nothing
     }
+    #elif defined(Q_OS_WIN)
+    ldTotalCpuUsage = rand() % 100; // Fake data for now => to test on the window
     ui->lbTotalCpuUsage->setText(QString::number(ldTotalCpuUsage, 'f', 2));
+    #endif
 
+    // Display the CPU temperature
+    #ifdef Q_OS_LINUX
     ldTemper = glTotalCpuInfo->CalculateTemperature();
-    if (ldTemper < 0)
+    if (ldTemper >= 0)
     {
-        ldTemper = rand() % 100; // Fake data for now => to test on the window
+        ui->lbTemperature->setText(QString::number(ldTemper, 'f', 2));
     }
     else
     {
         // Do nothing
     }
     ui->lbTemperature->setText(QString::number(ldTemper, 'f', 2));
+    #elif defined(Q_OS_WIN)
+    ldTemper = rand() % 100; // Fake data for now => to test on the window
+    ui->lbTemperature->setText(QString::number(ldTemper, 'f', 2));
+    #endif
 }

@@ -16,7 +16,9 @@ SOURCES += \
     cpuinfoclass.cpp \
     cpuwindow.cpp \
     main.cpp \
-    mainwindow.cpp
+    mainwindow.cpp \
+    memorywindow.cpp \
+    raminfoclass.cpp
 
 HEADERS += \
     AppConfig.h \
@@ -25,11 +27,14 @@ HEADERS += \
     StatusCircle.h \
     cpuinfoclass.h \
     cpuwindow.h \
-    mainwindow.h
+    mainwindow.h \
+    memorywindow.h \
+    raminfoclass.h
 
 FORMS += \
     cpuwindow.ui \
-    mainwindow.ui
+    mainwindow.ui \
+    memorywindow.ui
 
 # Default rules for deployment.
 qnx: target.path = /tmp/$${TARGET}/bin

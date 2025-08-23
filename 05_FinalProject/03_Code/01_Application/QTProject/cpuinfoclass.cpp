@@ -116,7 +116,7 @@ double CpuInfoClass::CalculateCpuUsage()
                 this->ulSoftirq = lulSoftirq;
                 this->ulSteal = lulSteal;
 
-                if (lulTotalDiff >= 0)
+                if (lulCurTotal >= lulPrevTotal)
                 {
                     return ((double)(lulTotalDiff - lulIdleDiff) / (double)lulTotalDiff) * 100.0;
                 }

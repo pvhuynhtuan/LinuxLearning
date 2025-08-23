@@ -2,10 +2,25 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include "RingMeter.h"
+
 #include "cpuwindow.h"
+#include "memorywindow.h"
+
+#include "RingMeter.h"
+#include "cpuinfoclass.h"
+#include "raminfoclass.h"
 
 #include "AppConfig.h"
+
+// include the linux platform header section
+#ifdef Q_OS_LINUX
+#include <string.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <net/if.h>
+#include <ifaddrs.h>
+#endif /* End of #ifdef Q_OS_LINUX */
 
 // Specific define for CPU display
 #define MAIN_FAST_TIMER_INTERVAL_MS         100
@@ -33,8 +48,15 @@ private slots:
 
 private:
     cpuwindow *cpuScreen;
+    MemoryWindow *memoryScreen;
     Ui::MainWindow *ui;
     RingMeter *pCpuMeter;
     RingMeter *pRamMeter;
+    CpuInfoClass *glTotalCpuInfo;
+    RamInfoClass *gpRamInfo;
+#ifdef Q_OS_LINUX
+    QString gsMyIP;
+    QString getCurrentIP();
+#endif /* End of #ifdef Q_OS_LINUX */
 };
 #endif // MAINWINDOW_H

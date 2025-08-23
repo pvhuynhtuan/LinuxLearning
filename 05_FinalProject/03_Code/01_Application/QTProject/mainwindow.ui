@@ -46,7 +46,7 @@
     <property name="geometry">
      <rect>
       <x>0</x>
-      <y>220</y>
+      <y>225</y>
       <width>321</width>
       <height>15</height>
      </rect>
@@ -208,7 +208,7 @@
 }</string>
          </property>
          <property name="text">
-          <string>CPU freq: ----MHz</string>
+          <string>Load Avg: ----</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignmentFlag::AlignHCenter|Qt::AlignmentFlag::AlignTop</set>
@@ -562,18 +562,24 @@
       <layout class="QVBoxLayout" name="verticalLayout_3">
        <item>
         <widget class="QLabel" name="lbCurrentTime">
+         <property name="maximumSize">
+          <size>
+           <width>16777215</width>
+           <height>26</height>
+          </size>
+         </property>
          <property name="font">
           <font>
            <family>Segoe UI</family>
-           <pointsize>12</pointsize>
+           <pointsize>20</pointsize>
            <italic>false</italic>
            <bold>true</bold>
           </font>
          </property>
          <property name="styleSheet">
           <string notr="true">QLabel {
-	color: rgb(255, 255, 255);
-	font: 700 12pt &quot;Segoe UI&quot;;
+	color: rgb(85, 255, 255);
+	font: 700 20pt &quot;Segoe UI&quot;;
     background: transparent;
 	border: none;
 }</string>
@@ -609,7 +615,7 @@
          <property name="styleSheet">
           <string notr="true">QLabel {
 	color: rgb(255, 255, 255);
-	font: 700 6pt &quot;Segoe UI&quot;;
+	font: 700 9pt &quot;Segoe UI&quot;;
     background: transparent;
 	border: none;
 }</string>
@@ -638,7 +644,7 @@
            <property name="styleSheet">
             <string notr="true">QLabel {
 	color: rgb(255, 255, 255);
-	font: 700 7pt &quot;Segoe UI&quot;;
+	font: 700 8pt &quot;Segoe UI&quot;;
     background: transparent;
 	border: none;
 }</string>
@@ -662,7 +668,7 @@
            <property name="styleSheet">
             <string notr="true">QLabel {
 	color: rgb(255, 255, 255);
-	font: 7pt &quot;Segoe UI&quot;;
+	font: 8pt &quot;Segoe UI&quot;;
     background: transparent;
 	border: none;
 }</string>
@@ -720,8 +726,8 @@
   </customwidget>
  </customwidgets>
  <resources>
-  <include location="temper.qrc"/>
   <include location="BackGround.qrc"/>
+  <include location="temper.qrc"/>
  </resources>
  <connections/>
 </ui>
